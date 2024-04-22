@@ -127,9 +127,9 @@ Timeout waiting for unit to start has been exceeded
 
 We welcome pull requests and issues!
 
-Please refer to the [Contributing Guidelines](CONTRIBUTING.md) when doing a PR.
+Please refer to the [Contributing Guidelines](../CONTRIBUTING.md) when doing a PR.
 
 ## License
 
 All code in this repository is licensed under the
-[Apache License v2 license](LICENSE.txt).
+[Apache License v2 license](../LICENSE.txt).
