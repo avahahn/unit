@@ -26,10 +26,9 @@ COMMITSAR                 ?= $(shell command -v commitsar 2> /dev/null)
 # Define platform targets based off of the current host OS
 # If we are running MacOS, then we can build for MacOS platform targets that have been installed in rustup
 # If we are running Linux, then we can build for Linux platform targets that have been installed in rustup
-UNAME = $(shell uname | tr '[:upper:]' '[:lower:]')
-ifeq ($(UNAME),darwin)
+ifeq ($(uname -s),darwin)
 	TARGETS       := $(sort $(shell $(RUSTUP) target list | $(GREP) '(installed)' | $(GREP) 'apple' | cut -d' ' -f1))
-else ifeq ($(UNAME),linux)
+else ifeq ($(uname -s),linux)
 	TARGETS       := $(sort $(shell $(RUSTUP) target list | $(GREP) '(installed)' | $(GREP) 'linux' | cut -d' ' -f1))
 else
 	TARGETS       := $(DEFAULT_TARGET)
