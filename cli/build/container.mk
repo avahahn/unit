@@ -3,7 +3,7 @@
 container-debian-build-image:
 container-debian-build-image: ## Builds a container image for building on Debian Linux
 	$Q echo "$(M) building debian linux docker build image: $(@)"
-	$(DOCKER) buildx build $(DOCKER_BUILD_FLAGS) -t debian_builder -f Containerfile.debian $(CURDIR);
+	$(DOCKER) buildx build $(DOCKER_BUILD_FLAGS) -t debian_builder -f Dockerfile $(CURDIR);
 
 .PHONY: container-deb-packages
 container-deb-packages: container-debian-build-image ## Builds deb packages using a container image
