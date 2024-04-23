@@ -28,12 +28,12 @@ OPENAPI_GENERATOR_VERSION ?= 6.6.0
 # Define platform targets based off of the current host OS
 # If running MacOS, then build for MacOS platform targets installed in rustup
 # If running Linux, then build for Linux platform targets installed in rustup
-ifeq ($(uname -s),darwin)
+ifeq ($(shell uname -s),Darwin)
 	TARGETS       := $(sort $(shell $(RUSTUP) target list | \
 						$(GREP) '(installed)' | \
 						$(GREP) 'apple' | \
 						cut -d' ' -f1))
-else ifeq ($(uname -s),linux)
+else ifeq ($(shell uname -s),Linux)
 	TARGETS       := $(sort $(shell $(RUSTUP) target list | \
 						$(GREP) '(installed)' | \
 						$(GREP) 'linux' | \
