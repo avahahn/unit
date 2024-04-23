@@ -6,9 +6,9 @@ This project provides a Rust SDK interface to the
 and a CLI (`unitctl`) that exposes the functionality provided by the SDK.
 
 ## Installation and Use
-In order to build and use `unitctl` one needs a working installation of Cargo.
-It is recommended to procure Cargo with Rustup. Rustup is packaged for use in
-many systems, but you can also find it at its 
+In order to build and use `unitctl` one needs a working installation of Maven 
+and Cargo. It is recommended to procure Cargo with Rustup. Rustup is packaged 
+for use in many systems, but you can also find it at its 
 [Official Site](https://rustup.rs/).
 
 With a working installation of Cargo it is advised to build unitctl with the 
