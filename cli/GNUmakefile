@@ -8,6 +8,10 @@ GREP               ?= $(shell command -v ggrep 2> /dev/null || command -v grep 2
 SED                ?= $(shell command -v gsed 2> /dev/null || command -v sed 2> /dev/null)
 AWK                ?= $(shell command -v gawk 2> /dev/null || command -v awk 2> /dev/null)
 RUSTUP             ?= $(shell command -v rustup 2> /dev/null)
+ifeq ($(RUSTUP),)
+$(error Please install Rustup)
+endif
+
 RPM_ARCH           := $(shell uname -m)
 VERSION            ?= $(shell $(GREP) -Po '^version\s+=\s+"\K.*?(?=")' $(CURDIR)/unitctl/Cargo.toml)
 SRC_REPO           := https://github.com/nginxinc/unit-rust-sdk
@@ -19,8 +23,6 @@ CARGO              ?= cargo
 DOCKER             ?= docker
 DOCKER_BUILD_FLAGS ?= --load
 CHECKSUM           ?= sha256sum
-COMMITSAR_DOCKER   := $(DOCKER) run --tty --rm --workdir /src -v "$(CURDIR):/src" aevea/commitsar
-COMMITSAR          ?= $(shell command -v commitsar 2> /dev/null)
 OPENAPI_GENERATOR_VERSION ?= 6.6.0
 
 # Define platform targets based off of the current host OS
@@ -45,11 +47,6 @@ RELEASE_BUILD_FLAGS ?= --quiet --release --bin $(OUTPUT_BINARY)
 Q = $(if $(filter 1,$V),,@)
 M = $(shell printf "\033[34;1m▶\033[0m")
 
-# Use docker based commitsar if it isn't in the path
-ifeq ($(COMMITSAR),)
-	COMMITSAR = $(COMMITSAR_DOCKER)
-endif
-
 .PHONY: help
 help:
 	@$(GREP) --no-filename -E '^[ a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -59,11 +56,6 @@ help:
 .PHONY: clean
 clean: ; $(info $(M) cleaning...)@ ## Cleanup everything
 	$Q rm -rf $(CURDIR)/target
-
-.PHONY: commitsar
-commitsar: ## Run git commit linter
-	$Q $(info $(M) running commitsar...)
-	$(COMMITSAR)
 
 .PHONY: list-targets
 list-targets: ## List all available platform targets
