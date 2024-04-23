@@ -66,26 +66,26 @@ all: $(TARGETS) ## Build all available platform targets [see: list-targets]
 
 .PHONY: $(TARGETS)
 .ONESHELL: $(TARGETS)
-$(TARGETS): ## Build for a specific target
+$(TARGETS): openapi-generate
 	$Q if [ ! -f "$(CURDIR)/target/$(@)/release/$(OUTPUT_BINARY)" ]; then
 		echo "$(M) building $(OUTPUT_BINARY) with flags [$(RELEASE_BUILD_FLAGS) --target $(@)]"
 		$(CARGO) build $(RELEASE_BUILD_FLAGS) --target $@
 	fi
 
-target:
+target target/debug:
 	$Q mkdir -p $@
 
 .PHONY: debug
 debug: target/debug/$(OUTPUT_BINARY)
 
-target/debug/$(OUTPUT_BINARY):
+target/debug/$(OUTPUT_BINARY): openapi-generate
 	$Q echo "$(M) building $(OUTPUT_BINARY) in debug mode for the current platform"
 	$Q $(CARGO) build --bin $(OUTPUT_BINARY)
 
 .PHONY: release
 release: target/release/$(OUTPUT_BINARY)
 
-target/release/$(OUTPUT_BINARY):
+target/release/$(OUTPUT_BINARY): openapi-generate
 	$Q echo "$(M) building $(OUTPUT_BINARY) in release mode for the current platform"
 	$Q $(CARGO) build $(RELEASE_BUILD_FLAGS)
 
@@ -113,19 +113,21 @@ manpage: target/man/$(OUTPUT_BINARY).1.gz ## Builds man page
 ## Generate (or regenerate) UNIT API access code via a OpenAPI spec
 .PHONY: openapi-generate
 openapi-generate: .openapi_cache
-	$Q $(info $(M) generating UNIT API access code via a OpenAPI spec)
-	OPENAPI_GENERATOR_VERSION="$(OPENAPI_GENERATOR_VERSION)" \
-	OPENAPI_GENERATOR_DOWNLOAD_CACHE_DIR="$(CURDIR)/.openapi_cache" \
-	$(CURDIR)/build/openapi-generator-cli.sh \
-		generate \
-		--input-spec "$(CURDIR)/openapi.yaml" \
-		--config "$(CURDIR)/openapi-config.json" \
-		--template-dir "$(CURDIR)/unit-openapi/openapi-templates" \
-		--output "$(CURDIR)/unit-openapi" \
-		--generator-name rust
-	$Q echo "mod error;" >> "$(CURDIR)/unit-openapi/src/apis/mod.rs"
-	$Q $(SED) -i '1i #![allow(clippy::all)]' "$(CURDIR)/unit-openapi/src/lib.rs"
-	$Q $(CARGO) fmt
+	$Q if [ ! -f "$(CURDIR)/unit-openapi/src/models/mod.rs" ]; then
+		echo "$(M) generating UNIT API access code via a OpenAPI spec"
+		OPENAPI_GENERATOR_VERSION="$(OPENAPI_GENERATOR_VERSION)" \
+		OPENAPI_GENERATOR_DOWNLOAD_CACHE_DIR="$(CURDIR)/.openapi_cache" \
+		$(CURDIR)/build/openapi-generator-cli.sh \
+			generate \
+			--input-spec "$(CURDIR)/../docs/unit-openapi.yaml" \
+			--config "$(CURDIR)/openapi-config.json" \
+			--template-dir "$(CURDIR)/unit-openapi/openapi-templates" \
+			--output "$(CURDIR)/unit-openapi" \
+			--generator-name rust
+		echo "mod error;" >> "$(CURDIR)/unit-openapi/src/apis/mod.rs"
+		$(SED) -i '1i #![allow(clippy::all)]' "$(CURDIR)/unit-openapi/src/lib.rs"
+		$(CARGO) fmt
+	fi
 
 .PHONY: openapi-clean
 openapi-clean: ## Clean up generated OpenAPI files
