@@ -1,10 +1,12 @@
 FROM rust:slim-bullseye
 
-ADD https://unit.nginx.org/keys/nginx-keyring.gpg /usr/share/keyrings/nginx-keyring.gpg
+ADD https://unit.nginx.org/keys/nginx-keyring.gpg \
+    /usr/share/keyrings/nginx-keyring.gpg
 
 RUN set -eux \
     export DEBIAN_FRONTEND=noninteractive; \
-    echo 'fc27fd284cceb4bf6c8ac2118dbb5e834590836f8d6ba3944da0e0451cbadeca  /usr/share/keyrings/nginx-keyring.gpg' | sha256sum --check -; \
+    echo 'fc27fd284cceb4bf6c8ac2118dbb5e834590836f8d6ba3944da0e0451cbadeca  /usr/share/keyrings/nginx-keyring.gpg' |\
+    sha256sum --check -; \
     chmod 0644 /usr/share/keyrings/nginx-keyring.gpg; \
     echo "deb [signed-by=/usr/share/keyrings/nginx-keyring.gpg] https://packages.nginx.org/unit/debian/ bullseye unit" > /etc/apt/sources.list.d/unit.list; \
     apt-get -qq update; \

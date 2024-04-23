@@ -1,27 +1,29 @@
 # NGINX UNIT Rust SDK and CLI
 
-This project provides a Rust SDK interface to the [NGINX UNIT](https://unit.nginx.org/)
-[control API](https://unit.nginx.org/howto/source/#source-startup) and a CLI that exposes
-the functionality provided by the SDK.
+This project provides a Rust SDK interface to the 
+[NGINX UNIT](https://unit.nginx.org/)
+[control API](https://unit.nginx.org/howto/source/#source-startup) 
+and a CLI that exposes the functionality provided by the SDK.
 
 ## Vision
 
 There are two main goals for this project:
 
-1. Provide a Rust SDK for the NGINX UNIT control API that has been pregenerated from the
-   OpenAPI specification. This will allow Rust developers to easily integrate NGINX UNIT
-   into their applications without having to generate their own SDK from the OpenAPI
+1. Provide a Rust SDK for the NGINX UNIT control API that has been pregenerated
+   from the OpenAPI specification. This will allow Rust developers to easily 
+   integrate NGINX UNIT into their applications without having to generate their
+   own SDK from the OpenAPI
    [specification file](https://unit.nginx.org/controlapi/#openapi-specification).
 
-2. Provide a CLI that exposes the functionality of the SDK. This will allow users to
-   interact with NGINX UNIT from the command line without having to write their own
-   scripts or programs. The CLI will also provide a reference implementation of the SDK.
-   Moreover, the CLI will integrate in data format conversions and validations that are
-   not supported by NGINX UNIT.
+2. Provide a CLI that exposes the functionality of the SDK. This will allow 
+   users to interact with NGINX UNIT from the command line without having to 
+   write their own scripts or programs. The CLI will also provide a reference 
+   implementation of the SDK. Moreover, the CLI will integrate in data format 
+   conversions and validations that are not supported by NGINX UNIT.
 
 ## Features (Current)
 
-### Parses and validates configuration formats that UNIT does not support like JSON5 and YAML and converts them before sending to UNIT
+### Consumes alternative configuration formats Like YAML and converts them
 ### Syntactic highlighting of JSON output
 ### Interpretation of UNIT errors with (arguably more) useful error messages
 
@@ -34,7 +36,7 @@ unitd instance [pid: 79489, version: 1.32.0]:
   API control unix socket: unix:/opt/unit/control.unit.sock
   Child processes ids: 79489, 79489
   Runtime flags: --no-daemon
-  Configure options: --prefix=/opt/unit --user=elijah --group=elijah --openssl --debug
+  Configure options: --prefix=/opt/unit --user=elijah --group=elijah --openssl
 ```
 
 ### Lists active listeners from running UNIT processes
@@ -104,7 +106,7 @@ Press Ctrl-C to stop the server
 ### Import configuration, certificates, and NJS modules from directory
 ```
 $ unitctl import /opt/unit/config
-Imported /opt/unit/config/certificates/consolidated_snake.pem -> /certificates/consolidated_snake.pem
+Imported /opt/unit/config/certificates/snake.pem -> /certificates/snake.pem
 Imported /opt/unit/config/hello.js -> /js_modules/hello.js
 Imported /opt/unit/config/put.json -> /config
 Imported 3 files
@@ -127,7 +129,8 @@ Timeout waiting for unit to start has been exceeded
 
 We welcome pull requests and issues!
 
-Please refer to the [Contributing Guidelines](../CONTRIBUTING.md) when doing a PR.
+Please refer to the 
+[Contributing Guidelines](../CONTRIBUTING.md) when doing a PR.
 
 ## License
 
