@@ -133,11 +133,6 @@ Waiting for 3s control socket to be available try 4/4...
 Timeout waiting for unit to start has been exceeded
 ```
 
-## Features (Proposed)
-* Certificate validation (expiration date and validity checks) before upload
-* Make adding and maintaining mime types easier
-* Add features present in unit-cli
-
 ## Contribution
 
 We welcome pull requests and issues!
