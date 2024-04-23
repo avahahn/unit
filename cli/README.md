@@ -3,23 +3,36 @@
 This project provides a Rust SDK interface to the 
 [NGINX UNIT](https://unit.nginx.org/)
 [control API](https://unit.nginx.org/howto/source/#source-startup) 
-and a CLI that exposes the functionality provided by the SDK.
+and a CLI (`unitctl`) that exposes the functionality provided by the SDK.
 
-## Vision
+## Installation and Use
+In order to build and use `unitctl` one needs a working installation of Cargo.
+It is recommended to procure Cargo with Rustup. Rustup is packaged for use in
+many systems, but you can also find it at its 
+[Official Site](https://rustup.rs/).
 
-There are two main goals for this project:
+With a working installation of Cargo it is advised to build unitctl with the 
+provided makefile. The `list-targets` target will inform the user of what 
+platforms are available to be built. One or more of these can then be run as
+their own makefile targets. Alternatively, all available binary targets can be
+built with `make all`. See the below example for illustration:
 
-1. Provide a Rust SDK for the NGINX UNIT control API that has been pregenerated
-   from the OpenAPI specification. This will allow Rust developers to easily 
-   integrate NGINX UNIT into their applications without having to generate their
-   own SDK from the OpenAPI
-   [specification file](https://unit.nginx.org/controlapi/#openapi-specification).
+```
+[ava@calliope cli]$ make list-targets
+x86_64-unknown-linux-gnu
+[ava@calliope cli]$ make x86_64-unknown-linux-gnu
+▶ building unitctl with flags [--quiet --release --bin unitctl --target x86_64-unknown-linux-gnu]
+[ava@calliope cli]$ file ./target/x86_64-unknown-linux-gnu/release/unitctl
+./target/x86_64-unknown-linux-gnu/release/unitctl: ELF 64-bit LSB pie executable,
+x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2,
+BuildID[sha1]=ef4b094ffd549b39a8cb27a7ba2cc0dbad87a3bc, for GNU/Linux 4.4.0,
+with debug_info, not stripped
+```
 
-2. Provide a CLI that exposes the functionality of the SDK. This will allow 
-   users to interact with NGINX UNIT from the command line without having to 
-   write their own scripts or programs. The CLI will also provide a reference 
-   implementation of the SDK. Moreover, the CLI will integrate in data format 
-   conversions and validations that are not supported by NGINX UNIT.
+As demonstrated in the example above, compiled binaries may be found in the
+targets folder, under the subdirectory corresponding to the build target 
+desired.
+
 
 ## Features (Current)
 
