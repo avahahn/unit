@@ -1,13 +1,7 @@
-.PHONY: changelog
-.ONESHELL: changelog
-changelog: ## Outputs the changes since the last version committed
-	$Q VERSION="$(VERSION)" $(CURDIR)/build/changelog.sh
-
 .ONESHELL: target/dist/release_notes.md
 target/dist/release_notes.md: target/dist target/dist/SHA256SUMS
 	$(info $(M) building release notes) @
 	$Q echo "# Release Notes" > target/dist/release_notes.md
-	VERSION="$(VERSION)" $(CURDIR)/build/changelog.sh >> target/dist/release_notes.md
 	echo '## SHA256 Checksums' >> target/dist/release_notes.md
 	echo '```' >> target/dist/release_notes.md
 	cat target/dist/SHA256SUMS >> target/dist/release_notes.md
