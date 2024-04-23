@@ -10,15 +10,17 @@ install-packaging-rpm:
 		$(CARGO) install --quiet cargo-generate-rpm; \
 	fi
 
+## Installs tools needed for building distributable packages
 .PHONY: install-packaging-tools
-install-packaging-tools: ## Installs tools needed for building distributable packages
+install-packaging-tools:
 	$Q $(CARGO) install --quiet cargo-deb cargo-generate-rpm
 
 target/dist:
 	$Q mkdir -p $@
 
+## Builds all packages for all targets
 .PHONY: all-packages
-all-packages: deb-packages rpm-packages gz-packages ## Builds all packages for all targets
+all-packages: deb-packages rpm-packages gz-packages
 
 target/dist/SHA256SUMS: target/dist
 	$Q cd target/dist && $(CHECKSUM) * > SHA256SUMS
@@ -26,12 +28,14 @@ target/dist/SHA256SUMS: target/dist
 .PHONY: checksums
 checksums: target/dist/SHA256SUMS ## Generates checksums for all packages
 
-######################################################################################################################
+################################################################################
 ### Debian Packages
-######################################################################################################################
+################################################################################
 
-to_debian_arch = $(shell echo $(1) | $(SED) -e 's/x86_64/amd64/' -e 's/aarch64/arm64/' -e 's/armv7/armhf/')
-DEBIAN_PACKAGE_TARGETS := $(foreach t, $(TARGETS), target/$(t)/debian/$(PACKAGE_NAME)_$(VERSION)_$(call to_debian_arch, $(firstword $(subst -,  , $(t)))).deb)
+to_debian_arch = $(shell echo $(1) | \
+	$(SED) -e 's/x86_64/amd64/' -e 's/aarch64/arm64/' -e 's/armv7/armhf/')
+DEBIAN_PACKAGE_TARGETS := \
+	$(foreach t, $(TARGETS), target/$(t)/debian/$(PACKAGE_NAME)_$(VERSION)_$(call to_debian_arch, $(firstword $(subst -,  , $(t)))).deb)
 
 .ONESHELL: $(DEBIAN_PACKAGE_TARGETS)
 .NOTPARALLEL: $(DEBIAN_PACKAGE_TARGETS)
@@ -53,12 +57,13 @@ $(DEBIAN_PACKAGE_TARGETS): $(TARGETS) target/man/$(OUTPUT_BINARY).1.gz target/di
 		ln -f "$(CURDIR)/$(@)" "$(CURDIR)/target/dist/"
 	fi
 
+## Creates a debian package for the current platform
 .PHONY: deb-packages
-deb-packages: install-packaging-deb $(TARGETS) manpage $(DEBIAN_PACKAGE_TARGETS) ## Creates a debian package for the current platform
+deb-packages: install-packaging-deb $(TARGETS) manpage $(DEBIAN_PACKAGE_TARGETS)
 
-######################################################################################################################
+################################################################################
 ### RPM Packages
-######################################################################################################################
+################################################################################
 
 RPM_PACKAGE_TARGETS := $(foreach t, $(TARGETS), target/$(t)/generate-rpm/$(PACKAGE_NAME)_$(VERSION)_$(firstword $(subst -,  , $(t))).rpm)
 
@@ -69,7 +74,7 @@ $(RPM_PACKAGE_TARGETS): $(TARGETS) target/man/$(OUTPUT_BINARY).1.gz target/dist
 	ARCH="$(firstword $(subst -,  , $(word 2, $(subst /,  , $(dir $@)))))"
 	# Skip building rpms for musl targets
 	if echo "$(@)" | $(GREP) -q 'musl\|apple'; then \
-  		exit 0
+		exit 0
 	fi
 	if [ ! -f "$(CURDIR)/$(@)" ]; then
 		if [ -d "$(CURDIR)/target/release" ]; then \
@@ -84,16 +89,18 @@ $(RPM_PACKAGE_TARGETS): $(TARGETS) target/man/$(OUTPUT_BINARY).1.gz target/dist
 		ln -f "$(CURDIR)/$(@)" "$(CURDIR)/target/dist/"
 	fi
 
+## Creates a rpm package for the current platform
 .PHONY: rpm-packages
-rpm-packages: install-packaging-rpm $(TARGETS) manpage $(RPM_PACKAGE_TARGETS) ## Creates a rpm package for the current platform
+rpm-packages: install-packaging-rpm $(TARGETS) manpage $(RPM_PACKAGE_TARGETS)
 
-######################################################################################################################
+################################################################################
 ### Homebrew Packages
-######################################################################################################################
+################################################################################
 
+## Modifies the homebrew formula to point to the latest release
 .PHONY: homebrew-packages
 .ONESHELL: homebrew-packages
-homebrew-packages: target/dist/SHA256SUMS ## Modifies the homebrew formula to point to the latest release
+homebrew-packages: target/dist/SHA256SUMS
 ifdef NEW_VERSION
 	VERSION=$(NEW_VERSION)
 endif
@@ -108,9 +115,9 @@ endif
 	envsubst < $(CURDIR)/pkg/brew/$(PACKAGE_NAME).rb.template > $(CURDIR)/pkg/brew/$(PACKAGE_NAME).rb
 
 
-######################################################################################################################
+################################################################################
 ### Tarball Packages
-######################################################################################################################
+################################################################################
 
 GZ_PACKAGE_TARGETS = $(foreach t, $(TARGETS), target/gz/$(t)/$(PACKAGE_NAME)_$(VERSION)_$(firstword $(subst -,  , $(t))).tar.gz)
 
@@ -127,5 +134,6 @@ $(GZ_PACKAGE_TARGETS): $(TARGETS) target/man/$(PACKAGE_NAME).1.gz target/dist
 		ln -f "$${PACKAGE}" "$(CURDIR)/target/dist/"
 	fi
 
+## Creates a gzipped tarball all target platforms
 .PHONE: gz-packages
-gz-packages: $(GZ_PACKAGE_TARGETS)  ## Creates a gzipped tarball all target platforms
+gz-packages: $(GZ_PACKAGE_TARGETS)

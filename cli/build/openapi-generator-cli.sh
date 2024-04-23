@@ -6,8 +6,8 @@
 ####
 # Save as openapi-generator-cli on your PATH. chmod u+x. Enjoy.
 #
-# This script will query github on every invocation to pull the latest released version
-# of openapi-generator.
+# This script will query github on every invocation to pull the latest released
+# version of openapi-generator.
 #
 # If you want repeatable executions, you can explicitly set a version via
 #    OPENAPI_GENERATOR_VERSION
@@ -19,8 +19,9 @@
 #
 # This is also helpful, for example, if you want to evaluate a SNAPSHOT version.
 #
-# NOTE: Jars are downloaded on demand from maven into the same directory as this script
-# for every 'latest' version pulled from github. Consider putting this under its own directory.
+# NOTE: Jars are downloaded on demand from maven into the same directory as this
+# script for every 'latest' version pulled from github. Consider putting this
+# under its own directory.
 ####
 set -o pipefail
 
