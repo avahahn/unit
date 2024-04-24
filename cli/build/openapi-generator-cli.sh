@@ -75,4 +75,3 @@ java -ea                          \
   -Xmx1024M                       \
   -server                         \
   -jar ${DIR}/${jar} "$@"
-

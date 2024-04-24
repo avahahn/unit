@@ -1,18 +1,18 @@
 # NGINX UNIT Rust SDK and CLI
 
-This project provides a Rust SDK interface to the 
+This project provides a Rust SDK interface to the
 [NGINX UNIT](https://unit.nginx.org/)
-[control API](https://unit.nginx.org/howto/source/#source-startup) 
+[control API](https://unit.nginx.org/howto/source/#source-startup)
 and a CLI (`unitctl`) that exposes the functionality provided by the SDK.
 
 ## Installation and Use
-In order to build and use `unitctl` one needs a working installation of Maven 
-and Cargo. It is recommended to procure Cargo with Rustup. Rustup is packaged 
-for use in many systems, but you can also find it at its 
+In order to build and use `unitctl` one needs a working installation of Maven
+and Cargo. It is recommended to procure Cargo with Rustup. Rustup is packaged
+for use in many systems, but you can also find it at its
 [Official Site](https://rustup.rs/).
 
-With a working installation of Cargo it is advised to build unitctl with the 
-provided makefile. The `list-targets` target will inform the user of what 
+With a working installation of Cargo it is advised to build unitctl with the
+provided makefile. The `list-targets` target will inform the user of what
 platforms are available to be built. One or more of these can then be run as
 their own makefile targets. Alternatively, all available binary targets can be
 built with `make all`. See the below example for illustration:
@@ -30,7 +30,7 @@ with debug_info, not stripped
 ```
 
 As demonstrated in the example above, compiled binaries may be found in the
-targets folder, under the subdirectory corresponding to the build target 
+targets folder, under the subdirectory corresponding to the build target
 desired.
 
 
@@ -106,7 +106,7 @@ $ unitctl edit
 
 {
   "success": "Reconfiguration done."
-}       
+}
 ```
 
 ### Display interactive OpenAPI control panel
@@ -137,7 +137,7 @@ Timeout waiting for unit to start has been exceeded
 
 We welcome pull requests and issues!
 
-Please refer to the 
+Please refer to the
 [Contributing Guidelines](../CONTRIBUTING.md) when doing a PR.
 
 ## License
