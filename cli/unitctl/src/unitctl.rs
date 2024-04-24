@@ -123,7 +123,7 @@ pub(crate) enum Commands {
             help = "Output format: yaml, json, json-pretty (default)"
         )]
         output_format: OutputFormat,
-    }
+    },
 }
 
 fn parse_control_socket_address(s: &str) -> Result<ControlSocket, ClapError> {
