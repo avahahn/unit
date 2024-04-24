@@ -8,7 +8,7 @@ extern crate unit_client_rs;
 
 use clap::Parser;
 
-use crate::cmd::{edit, execute as execute_cmd, import, instances, listeners, status, ui};
+use crate::cmd::{edit, execute as execute_cmd, import, instances, listeners, status};
 use crate::output_format::OutputFormat;
 use crate::unitctl::{Commands, UnitCtl};
 use crate::unitctl_error::UnitctlError;
@@ -43,12 +43,6 @@ fn main() -> Result<(), UnitctlError> {
         Commands::Status { output_format } => status::cmd(&cli, output_format),
 
         Commands::Listeners { output_format } => listeners::cmd(&cli, output_format),
-
-        Commands::Ui {
-            ref bind_address,
-            port,
-            debug,
-        } => ui::cmd(&cli, bind_address, port, debug),
     }
     .map_err(|error| {
         eprint_error(&error);
