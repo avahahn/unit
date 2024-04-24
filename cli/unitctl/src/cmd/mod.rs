@@ -4,4 +4,3 @@ pub(crate) mod import;
 pub(crate) mod instances;
 pub(crate) mod listeners;
 pub(crate) mod status;
-pub(crate) mod ui;

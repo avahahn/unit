@@ -123,34 +123,7 @@ pub(crate) enum Commands {
             help = "Output format: yaml, json, json-pretty (default)"
         )]
         output_format: OutputFormat,
-    },
-    #[command(about = "Start an interactive web UI")]
-    Ui {
-        #[arg(
-            required = false,
-            short = 'b',
-            long = "bind-address",
-            default_value = "127.0.0.1",
-            help = "Address to bind to"
-        )]
-        bind_address: String,
-        #[arg(
-            required = false,
-            short = 'p',
-            long = "port",
-            default_value = "3000",
-            help = "Port to listen on"
-        )]
-        port: u16,
-        #[arg(
-            required = false,
-            short = 'd',
-            long = "debug",
-            default_value = "false",
-            help = "Enable debug request/response logging"
-        )]
-        debug: bool,
-    },
+    }
 }
 
 fn parse_control_socket_address(s: &str) -> Result<ControlSocket, ClapError> {
