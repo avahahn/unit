@@ -132,15 +132,3 @@ Waiting for 3s control socket to be available try 3/4...
 Waiting for 3s control socket to be available try 4/4...
 Timeout waiting for unit to start has been exceeded
 ```
-
-## Contribution
-
-We welcome pull requests and issues!
-
-Please refer to the
-[Contributing Guidelines](../CONTRIBUTING.md) when doing a PR.
-
-## License
-
-All code in this repository is licensed under the
-[Apache License v2 license](../LICENSE).
