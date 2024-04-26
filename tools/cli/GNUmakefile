@@ -119,7 +119,7 @@ openapi-generate: .openapi_cache
 		OPENAPI_GENERATOR_DOWNLOAD_CACHE_DIR="$(CURDIR)/.openapi_cache" \
 		$(CURDIR)/build/openapi-generator-cli.sh \
 			generate \
-			--input-spec "$(CURDIR)/../docs/unit-openapi.yaml" \
+			--input-spec "$(CURDIR)/../../docs/unit-openapi.yaml" \
 			--config "$(CURDIR)/openapi-config.json" \
 			--template-dir "$(CURDIR)/unit-openapi/openapi-templates" \
 			--output "$(CURDIR)/unit-openapi" \
