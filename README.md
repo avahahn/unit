@@ -41,12 +41,25 @@ For details and available language packages, see the
 ### Docker
 
 ``` console
-$ docker pull unit
+$ docker pull unit:<TAG>
+$ mkdir /tmp/unit-control # customize as needed.
+$ docker run -d \
+      --mount type=bind,src=/tmp/unit-control,dst=/var/run \
+      --mount type=bind,src=.,dst=/www \
+      --network host \
+      unit
 ```
 
 For a description of image tags, see the
 [docs](https://unit.nginx.org/installation/#docker-images).
 
+WARNING: latest image tag may not provide support for specific language
+modules, *do* check the available image tags from the link above before
+pulling your image.
+
+Your current working directory will now be mounted to the Unit image at `/www`.
+You can reach its socket at `/tmp/unit-control/control.unit.sock` assuming no
+further customizations have been made.
 
 ### Amazon Linux, Fedora, Red Hat
 
@@ -71,6 +84,15 @@ $ wget https://raw.githubusercontent.com/nginx/unit/master/tools/setup-unit && c
 For details and available language packages, see the
 [docs](https://unit.nginx.org/installation/#official-packages).
 
+## Configuration
+
+NGINX Unit provides a RESTful API for dynamic configuration.
+See the [control API documentation](https://unit.nginx.org/controlapi/)
+for more information on what endpoints are available and how to use them.
+
+
+For full details of configuration management, see the
+[docs](https://unit.nginx.org/configuration/#configuration-management).
 
 ## Running a Hello World App
 
@@ -161,8 +183,10 @@ Unit's output should contain both snippets, neatly organized:
 }
 ```
 
-For full details of configuration management, see the
-[docs](https://unit.nginx.org/configuration/#configuration-management).
+## WebAssembly
+Unit supports running WebAssembly Components (WASI 0.2).
+For more information see the
+[Unit Configuration Docs](https://unit.nginx.org/configuration/#configuration-wasm).
 
 ## OpenAPI Specification
 
@@ -198,4 +222,3 @@ usability.
 - For security issues, [email us](mailto:security-alert@nginx.org),
   mentioning NGINX Unit in the subject and following the [CVSS
   v3.1](https://www.first.org/cvss/v3.1/specification-document) spec.
-
