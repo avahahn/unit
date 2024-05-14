@@ -10,6 +10,13 @@ on:
       - master
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: "Semver Tag."
+        required: true
 
 permissions:
   contents: write
@@ -37,9 +44,15 @@ jobs:
             target: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v4
-
+        
       - run: rustup update stable
       - run: rustup target add ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
       - name: Install macOS depedencies
         if: startsWith(matrix.os, 'macos')
@@ -136,7 +149,7 @@ jobs:
 
       - name: Get the version from the tag
         run: |
-          version=${{ github.ref_name }}
+          version=${version:=${{ github.ref_name }}}
           short="${version#*/}"
           echo $version; echo $short
           echo "VERSION=$version" >> $GITHUB_ENV
@@ -161,7 +174,7 @@ jobs:
 
   release:
     # Create a draft release if a tag
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -173,4 +186,5 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "unitctl-*"
+          tag: ${{github.event_name == 'workflow_dispatch' && inputs.version}}
           allowUpdates: true
