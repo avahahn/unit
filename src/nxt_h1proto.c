@@ -833,8 +833,6 @@ nxt_h1p_transfer_encoding(void *ctx, nxt_http_field_t *field, uintptr_t data)
     nxt_http_request_t  *r;
 
     r = ctx;
-    field->skip = 1;
-    field->hopbyhop = 1;
 
     if (field->value_length == 7
         && memcmp(field->value, "chunked", 7) == 0)
@@ -872,8 +870,8 @@ nxt_h1p_request_body_read(nxt_task_t *task, nxt_http_request_t *r)
     switch (h1p->transfer_encoding) {
 
     case NXT_HTTP_TE_CHUNKED:
-        status = NXT_HTTP_LENGTH_REQUIRED;
-        goto error;
+        r->chunked = 1;
+        break;
 
     case NXT_HTTP_TE_UNSUPPORTED:
         status = NXT_HTTP_NOT_IMPLEMENTED;
@@ -882,6 +880,34 @@ nxt_h1p_request_body_read(nxt_task_t *task, nxt_http_request_t *r)
     default:
     case NXT_HTTP_TE_NONE:
         break;
+    }
+
+    if (r->chunked) {
+        h1p->chunked_parse.mem_pool = r->mem_pool;
+        in = h1p->conn->read;
+        size = nxt_buf_mem_used_size(&in->mem);
+        if (size == 0) {
+            status = NXT_HTTP_NOT_IMPLEMENTED;
+            goto error;
+        }
+
+        nxt_buf_t *out = nxt_http_chunk_parse(task, &h1p->chunked_parse, in);
+
+        if (h1p->chunked_parse.chunk_error ||
+ h1p->chunked_parse.error) {
+            status = NXT_HTTP_NOT_IMPLEMENTED
+;
+            goto error;
+        }
+
+        if (h1p->chunked_parse.last) {
+            out->next = nxt_buf_sync_alloc(r->mem_pool, NXT_BUF_SYNC_LAST);
+            out = nxt_h1p_chunk_create(task, r, out);
+            r->body = out;
+            r->state->ready_handler(task, r,
+NULL);
+            return;
+        }
     }
 
     if (r->content_length_n == -1 || r->content_length_n == 0) {
@@ -1508,7 +1534,12 @@ nxt_h1p_chunk_create(nxt_task_t *task, nxt_http_request_t *r, nxt_buf_t *out)
     nxt_off_t          size;
     nxt_buf_t          *b, **prev, *header, *tail;
 
-    const size_t       chunk_size = 2 * nxt_length("\r\n") + NXT_OFF_T_HEXLEN;
+    size_t  chunk_size;
+    if (!r->chunked) {
+        chunk_size = 2 * nxt_length("\r\n") + NXT_OFF_T_HEXLEN;
+    } else {
+        chunk_size = nxt_length("\r\n") + NXT_OFF_T_HEXLEN;
+    }
     static const char  tail_chunk[] = "\r\n0\r\n\r\n";
 
     size = 0;
@@ -1548,8 +1579,14 @@ nxt_h1p_chunk_create(nxt_task_t *task, nxt_http_request_t *r, nxt_buf_t *out)
     }
 
     header->next = out;
-    header->mem.free = nxt_sprintf(header->mem.free, header->mem.end,
-                                   "\r\n%xO\r\n", size);
+    if (!r->chunked) {
+        header->mem.free = nxt_sprintf(header->mem.free, header->mem.end,
+                                       "\r\n%xO\r\n", size);
+    } else {
+        header->mem.free = nxt_sprintf(header->mem.free, header->mem.end,
+                                       "%xO\r\n", size);
+    }
+
     return header;
 }
 
@@ -2354,6 +2391,10 @@ nxt_h1p_peer_header_send(nxt_task_t *task, nxt_http_peer_t *peer)
         size += nxt_buf_used_size(body);
 
 //        nxt_mp_retain(r->mem_pool);
+        if (r->chunked) {
+            r->chunked = 0;
+            header->next = r->body;
+        }
     }
 
     if (size > 16384) {
