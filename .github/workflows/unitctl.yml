@@ -185,5 +185,6 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "unitctl-*"
-          tag: ${{github.event_name == 'workflow_dispatch' && inputs.version}}
+          tag: unitctl-${{github.event_name == 'workflow_dispatch' && inputs.version}}
+          body"
           allowUpdates: true
