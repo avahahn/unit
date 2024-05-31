@@ -5151,52 +5151,58 @@ nxt_router_process_http_request(nxt_task_t *task, nxt_http_request_t *r,
     conf = action->u.conf;
     engine = task->thread->engine;
 
-    r->app_target = conf->target;
+    if (!r->header_sent) {
+      r->app_target = conf->target;
 
-    req_rpc_data = nxt_port_rpc_register_handler_ex(task, engine->port,
-                                          nxt_router_response_ready_handler,
-                                          nxt_router_response_error_handler,
-                                          sizeof(nxt_request_rpc_data_t));
-    if (nxt_slow_path(req_rpc_data == NULL)) {
+      req_rpc_data = nxt_port_rpc_register_handler_ex(task, engine->port,
+                                                      nxt_router_response_ready_handler,
+                                                      nxt_router_response_error_handler,
+                                                      sizeof(nxt_request_rpc_data_t));
+      if (nxt_slow_path(req_rpc_data == NULL)) {
         nxt_http_request_error(task, r, NXT_HTTP_INTERNAL_SERVER_ERROR);
         return;
+      }
+
+      /*
+       * At this point we have request req_rpc_data allocated and registered
+       * in port handlers.  Need to fixup request memory pool.  Counterpart
+       * release will be called via following call chain:
+       *    nxt_request_rpc_data_unlink() ->
+       *        nxt_router_http_request_release_post() ->
+       *            nxt_router_http_request_release()
+       */
+      nxt_mp_retain(r->mem_pool);
+
+      r->timer.task = &engine->task;
+      r->timer.work_queue = &engine->fast_work_queue;
+      r->timer.log = engine->task.log;
+      r->timer.bias = NXT_TIMER_DEFAULT_BIAS;
+
+      r->engine = engine;
+      r->err_work.handler = nxt_router_http_request_error;
+      r->err_work.task = task;
+      r->err_work.obj = r;
+
+      req_rpc_data->stream = nxt_port_rpc_ex_stream(req_rpc_data);
+      req_rpc_data->app = conf->app;
+      req_rpc_data->msg_info.body_fd = -1;
+      req_rpc_data->rpc_cancel = 1;
+
+      nxt_router_app_use(task, conf->app, 1);
+
+      req_rpc_data->request = r;
+      r->req_rpc_data = req_rpc_data;
+
+      nxt_router_app_port_get(task, conf->app, req_rpc_data);
+
+    } else {
+      nxt_assert(r->req_rpc_data);
+      req_rpc_data = r->req_rpc_data;
     }
-
-    /*
-     * At this point we have request req_rpc_data allocated and registered
-     * in port handlers.  Need to fixup request memory pool.  Counterpart
-     * release will be called via following call chain:
-     *    nxt_request_rpc_data_unlink() ->
-     *        nxt_router_http_request_release_post() ->
-     *            nxt_router_http_request_release()
-     */
-    nxt_mp_retain(r->mem_pool);
-
-    r->timer.task = &engine->task;
-    r->timer.work_queue = &engine->fast_work_queue;
-    r->timer.log = engine->task.log;
-    r->timer.bias = NXT_TIMER_DEFAULT_BIAS;
-
-    r->engine = engine;
-    r->err_work.handler = nxt_router_http_request_error;
-    r->err_work.task = task;
-    r->err_work.obj = r;
-
-    req_rpc_data->stream = nxt_port_rpc_ex_stream(req_rpc_data);
-    req_rpc_data->app = conf->app;
-    req_rpc_data->msg_info.body_fd = -1;
-    req_rpc_data->rpc_cancel = 1;
-
-    nxt_router_app_use(task, conf->app, 1);
-
-    req_rpc_data->request = r;
-    r->req_rpc_data = req_rpc_data;
 
     if (r->last != NULL) {
-        r->last->completion_handler = nxt_router_http_request_done;
+      r->last->completion_handler = nxt_router_http_request_done;
     }
-
-    nxt_router_app_port_get(task, conf->app, req_rpc_data);
     nxt_router_app_prepare_request(task, req_rpc_data);
 }
 
@@ -5237,12 +5243,77 @@ nxt_router_http_request_done(nxt_task_t *task, void *obj, void *data)
 }
 
 
+static uint8_t
+nxt_router_buf_body_copy(
+    nxt_task_t *task,
+    nxt_http_request_t *r,
+    nxt_app_t *app,
+    nxt_buf_t *buf
+) {
+    size_t size, free_size, copy_size;
+    u_char *pos;
+    nxt_buf_t *b, **tail;
+
+    tail = &buf->next;
+    for (b = r->body; b != NULL; b = b->next) {
+        size = nxt_buf_mem_used_size(&b->mem);
+        pos = b->mem.pos;
+
+        while (size > 0) {
+            if (buf == NULL) {
+                free_size = nxt_min(size, PORT_MMAP_DATA_SIZE);
+
+                buf = nxt_port_mmap_get_buf(task, &app->outgoing, free_size);
+                if (nxt_slow_path(buf == NULL)) {
+                    while (buf != NULL) {
+                        buf = buf->next;
+                        buf->next = NULL;
+                        buf->completion_handler(task, buf, buf->parent);
+                        buf = buf;
+                    }
+                    return 0;
+                }
+
+                *tail = buf;
+                tail = &buf->next;
+
+            } else {
+                free_size = nxt_buf_mem_free_size(&buf->mem);
+                if (free_size < size
+                    && nxt_port_mmap_increase_buf(task, buf, size, 1)
+                    == NXT_OK)
+                {
+                    free_size = nxt_buf_mem_free_size(&buf->mem);
+                }
+            }
+
+            if (free_size > 0) {
+                copy_size = nxt_min(free_size, size);
+
+                buf->mem.free = nxt_cpymem(buf->mem.free, pos, copy_size);
+
+                size -= copy_size;
+                pos += copy_size;
+
+                if (size == 0) {
+                    break;
+                }
+            }
+
+            buf = NULL;
+        }
+    }
+
+    return buf ? 1 : 0;
+}
+
+
 static void
 nxt_router_app_prepare_request(nxt_task_t *task,
     nxt_request_rpc_data_t *req_rpc_data)
 {
     nxt_app_t         *app;
-    nxt_buf_t         *buf, *body;
+    nxt_buf_t         *buf;
     nxt_int_t         res;
     nxt_port_t        *port, *reply_port;
 
@@ -5264,34 +5335,25 @@ nxt_router_app_prepare_request(nxt_task_t *task,
 
     reply_port = task->thread->engine->port;
 
-    buf = nxt_router_prepare_msg(task, req_rpc_data->request, app,
-                                 nxt_app_msg_prefix[app->type]);
-    if (nxt_slow_path(buf == NULL)) {
-        nxt_alert(task, "stream #%uD, app '%V': failed to prepare app message",
-                  req_rpc_data->stream, &app->name);
-
-        nxt_http_request_error(task, req_rpc_data->request,
-                               NXT_HTTP_INTERNAL_SERVER_ERROR);
-
+    if (req_rpc_data->request->header_sent) {
+        nxt_router_buf_body_copy(task, req_rpc_data->request, app, req_rpc_data->msg_info.buf);
         return;
     }
 
-    nxt_debug(task, "about to send %O bytes buffer to app process port %d",
-                    nxt_buf_used_size(buf),
-                    port->socket.fd);
+    buf = nxt_router_prepare_msg(task, req_rpc_data->request, app,
+                                 nxt_app_msg_prefix[app->type]);
+    nxt_router_buf_body_copy(task, req_rpc_data->request, app, req_rpc_data->msg_info.buf);
+    if (nxt_slow_path(buf == NULL)) {
+      nxt_alert(task, "stream #%uD, app '%V': failed to prepare app message",
+                req_rpc_data->stream, &app->name);
+
+      nxt_http_request_error(task, req_rpc_data->request,
+                             NXT_HTTP_INTERNAL_SERVER_ERROR);
+
+      return;
+    }
 
     req_rpc_data->msg_info.buf = buf;
-
-    body = req_rpc_data->request->body;
-
-    if (body != NULL && nxt_buf_is_file(body)) {
-        req_rpc_data->msg_info.body_fd = body->file->fd;
-
-        body->file->fd = -1;
-
-    } else {
-        req_rpc_data->msg_info.body_fd = -1;
-    }
 
     msg.pm.stream = req_rpc_data->stream;
     msg.pm.pid = reply_port->pid;
@@ -5309,6 +5371,15 @@ nxt_router_app_prepare_request(nxt_task_t *task,
     msg.mm.chunk_id = nxt_port_mmap_chunk_id(hdr, buf->mem.pos);
     msg.mm.size = nxt_buf_used_size(buf);
 
+    // get the request decode state machine
+    // to continue filling in the body for us
+    req_rpc_data->request->body = buf;
+
+    req_rpc_data->request->header_sent = 1;
+
+    nxt_debug(task, "about to send %O bytes buffer to app process port %d",
+              nxt_buf_used_size(buf),
+              port->socket.fd);
     res = nxt_app_queue_send(port->queue, &msg, sizeof(msg),
                              req_rpc_data->stream, &notify,
                              &req_rpc_data->msg_info.tracking_cookie);
@@ -5394,10 +5465,9 @@ nxt_router_prepare_msg(nxt_task_t *task, nxt_http_request_t *r,
 {
     void                *target_pos, *query_pos;
     u_char              *pos, *end, *p, c;
-    size_t              fields_count, req_size, size, free_size;
-    size_t              copy_size;
+    size_t              fields_count, req_size;
     nxt_off_t           content_length;
-    nxt_buf_t           *b, *buf, *out, **tail;
+    nxt_buf_t           *out;
     nxt_http_field_t    *field, *dup;
     nxt_unit_field_t    *dst_field;
     nxt_fields_iter_t   iter, dup_iter;
@@ -5613,59 +5683,7 @@ nxt_router_prepare_msg(nxt_task_t *task, nxt_http_request_t *r,
 
     nxt_unit_sptr_set(&req->preread_content, out->mem.free);
 
-    buf = out;
-    tail = &buf->next;
-
-    for (b = r->body; b != NULL; b = b->next) {
-        size = nxt_buf_mem_used_size(&b->mem);
-        pos = b->mem.pos;
-
-        while (size > 0) {
-            if (buf == NULL) {
-                free_size = nxt_min(size, PORT_MMAP_DATA_SIZE);
-
-                buf = nxt_port_mmap_get_buf(task, &app->outgoing, free_size);
-                if (nxt_slow_path(buf == NULL)) {
-                    while (out != NULL) {
-                        buf = out->next;
-                        out->next = NULL;
-                        out->completion_handler(task, out, out->parent);
-                        out = buf;
-                    }
-                    return NULL;
-                }
-
-                *tail = buf;
-                tail = &buf->next;
-
-            } else {
-                free_size = nxt_buf_mem_free_size(&buf->mem);
-                if (free_size < size
-                    && nxt_port_mmap_increase_buf(task, buf, size, 1)
-                       == NXT_OK)
-                {
-                    free_size = nxt_buf_mem_free_size(&buf->mem);
-                }
-            }
-
-            if (free_size > 0) {
-                copy_size = nxt_min(free_size, size);
-
-                buf->mem.free = nxt_cpymem(buf->mem.free, pos, copy_size);
-
-                size -= copy_size;
-                pos += copy_size;
-
-                if (size == 0) {
-                    break;
-                }
-            }
-
-            buf = NULL;
-        }
-    }
-
-    return out;
+    return nxt_router_buf_body_copy(task, r, app, out) ? out : NULL;
 }
 
 

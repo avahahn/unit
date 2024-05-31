@@ -891,23 +891,25 @@ nxt_h1p_request_body_read(nxt_task_t *task, nxt_http_request_t *r)
             goto error;
         }
 
-        nxt_buf_t *out = nxt_http_chunk_parse(task, &h1p->chunked_parse, in);
-
-        if (h1p->chunked_parse.chunk_error ||
- h1p->chunked_parse.error) {
-            status = NXT_HTTP_NOT_IMPLEMENTED
-;
+        b = nxt_http_chunk_parse(task, &h1p->chunked_parse, in);
+        if (h1p->chunked_parse.chunk_error || h1p->chunked_parse.error) {
+            status = NXT_HTTP_NOT_IMPLEMENTED;
             goto error;
         }
 
-        if (h1p->chunked_parse.last) {
-            out->next = nxt_buf_sync_alloc(r->mem_pool, NXT_BUF_SYNC_LAST);
-            out = nxt_h1p_chunk_create(task, r, out);
-            r->body = out;
-            r->state->ready_handler(task, r,
-NULL);
-            return;
+        b = nxt_h1p_chunk_create(task, r, b);
+
+        if (!r->body) {
+          r->body = b;
+        } else {
+          nxt_buf_chain_add(&r->body, b);
         }
+
+        if (h1p->chunked_parse.last) {
+            b->next = nxt_buf_sync_alloc(r->mem_pool, NXT_BUF_SYNC_LAST);
+        }
+
+        goto ready;
     }
 
     if (r->content_length_n == -1 || r->content_length_n == 0) {
