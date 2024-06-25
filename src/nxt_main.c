@@ -6,10 +6,7 @@
 
 #include <nxt_main.h>
 #include <nxt_runtime.h>
-
-
 extern char  **environ;
-
 
 int nxt_cdecl
 main(int argc, char **argv)
