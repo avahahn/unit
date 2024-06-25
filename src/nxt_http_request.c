@@ -285,14 +285,15 @@ nxt_http_request_create(nxt_task_t *task)
     task->thread->engine->requests_cnt++;
 
     r->tstr_cache.var.pool = mp;
-
 #if (NXT_HAVE_OTEL)
-    r->otel = nxt_mp_zget(mp, sizeof(nxt_otel_state_t));
+    r->otel = nxt_mp_zget(r->mem_pool, sizeof(nxt_otel_state_t));
     if (!r->otel) {
       goto fail;
     }
+    // TODO: detect and only set if otel is configured
+    r->otel->status = NXT_OTEL_INIT_STATE;
+    nxt_otel_test_and_call_state(t, r);
 #endif
-
     return r;
 
 fail:
@@ -308,9 +309,6 @@ static const nxt_http_request_state_t  nxt_http_request_init_state
 {
     .ready_handler = nxt_http_request_start,
     .error_handler = nxt_http_request_close_handler,
-#if (NXT_HAVE_OTEL)
-    .telemetry_handler = NULL;
-#endif
 };
 
 
@@ -322,6 +320,10 @@ nxt_http_request_start(nxt_task_t *task, void *obj, void *data)
     nxt_http_request_t  *r;
 
     r = obj;
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_test_and_call_state(t, r);
+#endif
 
     r->state = &nxt_http_request_body_state;
 
@@ -596,6 +598,12 @@ nxt_http_request_ready(nxt_task_t *task, void *obj, void *data)
 
     r = obj;
     action = r->conf->socket_conf->action;
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_test_and_call_state(t, r);
+    // temporary for phase 1 demo: call again to emit spans
+    nxt_otel_test_and_call_state(t, r);
+#endif
 
     if (r->chunked) {
         ret = nxt_http_request_chunked_transform(r);

@@ -71,9 +71,6 @@ typedef enum {
 typedef struct {
     nxt_work_handler_t              ready_handler;
     nxt_work_handler_t              error_handler;
-#if (NXT_HAVE_OTEL)
-    nxt_work_handler_t              telemetry_handler;
-#endif
 } nxt_http_request_state_t;
 
 
