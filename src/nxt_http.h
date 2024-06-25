@@ -8,6 +8,7 @@
 #define _NXT_HTTP_H_INCLUDED_
 
 #include <nxt_regex.h>
+#include <nxt_otel.h>
 
 
 typedef enum {
@@ -70,6 +71,9 @@ typedef enum {
 typedef struct {
     nxt_work_handler_t              ready_handler;
     nxt_work_handler_t              error_handler;
+#if (NXT_HAVE_OTEL)
+    nxt_work_handler_t              telemetry_handler;
+#endif
 } nxt_http_request_state_t;
 
 
@@ -189,6 +193,10 @@ struct nxt_http_request_s {
     nxt_work_t                      err_work;
 
     nxt_http_response_t             resp;
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_state_t                *otel;
+#endif
 
     nxt_http_status_t               status:16;
 

@@ -286,6 +286,13 @@ nxt_http_request_create(nxt_task_t *task)
 
     r->tstr_cache.var.pool = mp;
 
+#if (NXT_HAVE_OTEL)
+    r->otel = nxt_mp_zget(mp, sizeof(nxt_otel_state_t));
+    if (!r->otel) {
+      goto fail;
+    }
+#endif
+
     return r;
 
 fail:
@@ -301,6 +308,9 @@ static const nxt_http_request_state_t  nxt_http_request_init_state
 {
     .ready_handler = nxt_http_request_start,
     .error_handler = nxt_http_request_close_handler,
+#if (NXT_HAVE_OTEL)
+    .telemetry_handler = NULL;
+#endif
 };
 
 
@@ -537,6 +547,9 @@ static const nxt_http_request_state_t  nxt_http_request_body_state
 {
     .ready_handler = nxt_http_request_ready,
     .error_handler = nxt_http_request_close_handler,
+#if (NXT_HAVE_OTEL)
+    .telemetry_handler = NULL;
+#endif
 };
 
 
