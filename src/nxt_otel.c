@@ -97,13 +97,14 @@ nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
 static void
 nxt_otel_error(nxt_http_request_t *r)
 {
+    // purposefully not using state transition helper
+    r->otel->status = 0;
+
     /* TODO:
      * 1. log error
      * 2. trigger rust library func to release any references to trace or span data
+     * 3. make null the reference to trace in r->otel
      */
-
-    // purposefully not using state transition helper
-    r->otel->status = 0;
 }
 
 static void
@@ -152,9 +153,11 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
         return;
     }
 
+    nxt_otel_state_transition(r, NULL);
+
     /* TODO:
      * 1. call Rust library func to send traces to collector
-     * 2. set otel->state to NULL using provided func
+     * 2. make null the reference to trace itself
      */
 }
 
