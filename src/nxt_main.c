@@ -25,6 +25,8 @@ main(int argc, char **argv)
         return 1;
     }
 
+    nxt_otel_init(&otel_phase1_log_callback);
+
 //    nxt_main_log.level = NXT_LOG_INFO;
 
     nxt_main_log.handler = nxt_log_time_handler;

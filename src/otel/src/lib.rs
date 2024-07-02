@@ -14,11 +14,6 @@ use opentelemetry_sdk::Resource;
 // otel_endpoint is hardcoded for proof of concept purposes.
 const OTEL_TRACES_ENDPOINT: &str = "http://lgtm:4318/v1/traces";
 
-lazy_static!{
-    static ref GLOBAL_REF_CACHE: Mutex<HashMap<SpanId, Arc<SpanImpl>>> =
-        Mutex::new(HashMap::new());
-}
-
 static GLOBAL_TRACER: OnceLock<TracerImpl> = OnceLock::new();
 
 // potentially returns an error message
@@ -99,35 +94,24 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
     // set null terminator
     *buf.add(54) = b'\0' as _;
 }
-
-/* WARNING
- * Blocks until mutex held
- * DO NOT CALL FROM REQUEST PROCESSING THREAD
- */
-#[inline(always)]
-fn cache_new_span(span: Arc<SpanImpl>) {
-    let id = span.span_context().span_id();
-    { // CRITICAL SECTION
-        let _ = GLOBAL_REF_CACHE
-            .lock()
-            .unwrap()
-            .insert(id, span);
+// its on the caller to pass in a buf of proper length
+#[no_mangle]
+pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
+    if buf.is_null() || span.is_null() {
+        return;
     }
-}
+    let traceparent = format!(
+        "00-{:032x}-{:016x}-{:02x}",
+        (*span).span_context().trace_id(),
+        (*span).span_context().span_id(),
+        (*span).span_context().trace_flags()
+    ).to_ascii_lowercase();
 
-/* WARNING
- * Blocks until mutex held
- * DO NOT CALL FROM REQUEST PROCESSING THREAD
- */
-#[inline(always)]
-fn drop_cached_span_if_exists(span: Arc<SpanImpl>) {
-    let id = span.span_context().span_id();
-    { // CRITICAL SECTION
-        let _ = GLOBAL_REF_CACHE
-            .lock()
-            .unwrap()
-            .remove(&id);
-    }
+    assert!(traceparent.len() == 55);
+
+    std::ptr::copy_nonoverlapping(traceparent.as_bytes().as_ptr(), buf as _, 55);
+    // set null terminator
+    *buf.add(56) = b'\0' as _;
 }
 
 #[no_mangle]
@@ -176,10 +160,6 @@ pub unsafe fn nxt_otel_get_or_create_trace(
     }
 
     let arc_span = Arc::new(span);
-    cache_new_span(arc_span.clone());
-
-    // this reference accounted for in
-    // nxt_otel_send_trace
     return Arc::<SpanImpl>::into_raw(arc_span) as *mut SpanImpl;
 }
 
@@ -196,11 +176,9 @@ pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
      */
     let arc_span = Arc::from_raw(trace);
 
-    // simple exporter will export spans when dropped
-    // aka at end of this function
-    drop_cached_span_if_exists(arc_span);
-
-    /* One final thing we can do here is check
+    /* simple exporter will export spans when dropped
+     * aka at end of this function
+     * One final thing we can do here is check
      * the strong count of the Arc. If it is not
      * now one, we can decrement manually to ensure
      * that is goes out of scope here.

@@ -34,7 +34,7 @@ typedef enum {
  * includes indicator as to current flow state
  */
 typedef struct {
-    u_char              *trace_id, *version, *parent_id, *trace_flags;
+    u_char            *trace_id, *version, *parent_id, *trace_flags;
     void              *trace;
     nxt_otel_status_t status;
     nxt_str_t         trace_state;

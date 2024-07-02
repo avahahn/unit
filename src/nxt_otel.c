@@ -13,7 +13,6 @@
 static inline void nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *);
 static inline void nxt_otel_span_collect(nxt_task_t *, nxt_http_request_t *);
 static void nxt_otel_send_trace_and_span_data(nxt_task_t *, void *, void *);
-static void nxt_otel_find_or_set_trace(nxt_task_t *, void*, void*);
 static void nxt_otel_span_add_header(nxt_http_request_t *);
 static void nxt_otel_span_add_body(nxt_http_request_t *);
 static void nxt_otel_error(nxt_http_request_t *);
@@ -67,8 +66,39 @@ nxt_otel_state_transition(nxt_otel_state_t *state, nxt_otel_status_t status)
 static inline void
 nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *r)
 {
-    nxt_work_queue_add(&t->thread->engine->fast_work_queue,
-                       nxt_otel_find_or_set_trace, t, r, NULL);
+    nxt_http_field_t *f;
+    u_char *val, *name;
+
+    r->otel->trace =
+      nxt_otel_get_or_create_trace(r->otel->trace_id);
+    if (!r->otel->trace) {
+      nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
+      return;
+    }
+
+    name = nxt_mp_zalloc(r->mem_pool, 11);
+    val = nxt_mp_zalloc(r->mem_pool, 56);
+    if (!val || !name) {
+      /* let it go blank here.
+       * span still gets populated and sent
+       * but data is not propagated to peer or app.
+       *
+       * TODO: Log this
+       */
+      return;
+    }
+
+    nxt_memcpy(name, "traceparent", 11);
+    nxt_otel_copy_traceparent(val, r->otel->trace);
+
+    f = nxt_list_add(r->resp.fields);
+    if (f) {
+      f->name = val;
+      f->name_length = 11;
+      f->value = val;
+      f->value_length = 56;
+    }
+
     nxt_otel_state_transition(r->otel, NXT_OTEL_HEADER_STATE);
 }
 
@@ -131,55 +161,6 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
     nxt_otel_state_transition(r->otel, 0);
     nxt_otel_send_trace(r->otel->trace);
     r->otel->trace = NULL;
-}
-
-static void
-nxt_otel_find_or_set_trace(nxt_task_t *task, void *obj, void *data)
-{
-    nxt_http_request_t *r;
-    nxt_http_field_t *f;
-    u_char *val, *name;
-
-    r = obj;
-
-    /* Do not fetch a new trace ID if we failed to parse one
-     * present in the request headers.
-     */
-    if (r->otel->status == NXT_OTEL_ERROR_STATE) {
-        return;
-    }
-
-    r->otel->trace =
-      nxt_otel_get_or_create_trace(r->otel->trace_id);
-    if (!r->otel->trace) {
-      // cuts off all other attempts to send otel data
-      // for this request specifically
-      r->otel = NULL;
-      return;
-    }
-
-    name = nxt_mp_zalloc(r->mem_pool, 11);
-    val = nxt_mp_zalloc(r->mem_pool, 55);
-    if (!val || !name) {
-      /* let it go blank here.
-       * span still gets populated and sent
-       * but data is not propagated to upstream.
-       *
-       * TODO: Log this
-       */
-      return;
-    }
-
-    memcpy(name, "traceparent", 11);
-    nxt_otel_copy_traceparent(val, r->otel->trace);
-
-    f = nxt_list_add(r->resp.fields);
-    if (f) {
-      f->name = val;
-      f->name_length = 11;
-      f->value = val;
-      f->value_length = 55;
-    }
 }
 
 nxt_int_t
