@@ -8,3 +8,5 @@ edition = "2021"
 opentelemetry = "0.23.0"
 opentelemetry_sdk = "0.23.0"
 opentelemetry-stdout = { version = "0.4.0", features = ["trace"] }
+lazy_static = "1.5.0"
+opentelemetry-otlp = "0.16.0"

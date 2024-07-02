@@ -49,7 +49,7 @@ nxt_otel_test_and_call_state(nxt_task_t *t, nxt_http_request_t *r)
 }
 
 static inline void
-nxt_otel_state_transition(nxt_otel_state_t *state, nxt_otel_status_t *status)
+nxt_otel_state_transition(nxt_otel_state_t state, nxt_otel_status_t *status)
 {
     if (status == NXT_OTEL_ERROR_STATE || state->status != NXT_OTEL_ERROR_STATE) {
         state->status = status;
@@ -91,7 +91,7 @@ nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
 {
     nxt_work_queue_add(&t->thread->engine->fast_work_queue,
                        nxt_otel_send_trace_and_span_data, t, r);
-    nxt_otel_state_transition(r, NULL)
+    nxt_otel_state_transition(r, 0)
 }
 
 static void
@@ -121,23 +121,8 @@ nxt_otel_find_or_set_trace(nxt_task_t *task, void *obj, void *data)
         return;
     }
 
-    /* Do not fetch a new trace ID if we successfully parsed
-     * one present in the request headers.
-     */
-    if(r->otel->trace_id) {
-        goto init;
-    }
-
-    /* TODO: make a new trace using rust lib function
-     *   a. if fail, set the otel->state to nxt_otel_error_state directly
-     *   b. if success, set r->otel->(all the fields)
-     *   c. fall through to init
-     */
-
- init:
-    /* TODO: do we need to initialize any state in rust lib?
-     *   if not, remove this case and exit instead.
-     */
+    r->otel->trace_id =
+      nxt_otel_get_or_create_trace(r->otel->trace_id);
 }
 
 static void
@@ -153,12 +138,10 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
         return;
     }
 
-    nxt_otel_state_transition(r, NULL);
-
-    /* TODO:
-     * 1. call Rust library func to send traces to collector
-     * 2. make null the reference to trace itself
-     */
+    nxt_otel_state_transition(r, 0);
+    nxt_otel_send_trace(r->otel->trace_id, strlen(r->otel->trace_id));
+    free(r->otel->trace_key);
+    r->otel->trace_key = NULL
 }
 
 nxt_int_t
@@ -196,6 +179,7 @@ nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field, uintptr_t data)
      *   first call to strtok_r() that is being used to parse str.
      */
     cursor = NULL;
+
     r->otel->version = strtok_r(copy, "-", &cursor);
     r->otel->trace_id = strtok_r(NULL, "-", &cursor);
     r->otel->parent_id = strtok_r(NULL, "-", &cursor);
@@ -225,6 +209,8 @@ nxt_otel_parse_tracestate(void *ctx, nxt_http_field_t *field, uintptr_t data)
     s.start = field->value;
     r = ctx;
     r->otel->trace_state = s;
+
+    // maybe someday this should get sent down into the otel lib
 
     return NXT_OK;
 }

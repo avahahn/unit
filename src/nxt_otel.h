@@ -7,6 +7,10 @@
 #if !defined _NXT_OTEL_H_INCLUDED_ && defined NXT_OTEL
 #define _NXT_OTEL_H_INCLUDED_
 
+extern void   nxt_otel_send_trace(char *trace_id, usize len);
+extern void * nxt_otel_get_or_create_trace(char *trace_id);
+extern char * nxt_otel_init();
+
 /* nxt_otel_status_t
  * more efficient than a single handler state struct
  */
@@ -24,10 +28,8 @@ typedef enum {
  * includes indicator as to current flow state
  */
 typedef struct {
-    char              *version;
-    char              *trace_id;
-    char              *parent_id;
-    char              *trace_flags;
+    char              *trace_id, *version, *parent_id, *trace_flags;
+    void              *trace;
     nxt_otel_status_t status;
     nxt_str_t         trace_state;
 } nxt_otel_state_t;
@@ -35,7 +37,9 @@ typedef struct {
 int nxt_otel_library_linkable();
 int nxt_otel_link_library();
 void nxt_otel_test_and_call_state(nxt_http_request_t *);
-nxt_int_t nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field, uintptr_t data);
-nxt_int_t nxt_otel_parse_tracestate(void *ctx, nxt_http_field_t *field, uintptr_t data);
+nxt_int_t nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field,
+                                     uintptr_t data);
+nxt_int_t nxt_otel_parse_tracestate(void *ctx, nxt_http_field_t *field,
+                                    uintptr_t data);
 
 #endif // _NXT_OTEL_H_INCLUDED_
