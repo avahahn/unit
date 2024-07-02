@@ -29,7 +29,6 @@ if test -n "$nxt_feature_incs"; then
     esac
 fi
 
-
 cat << END > $NXT_AUTOTEST.c
 $nxt_feature_test
 END
@@ -45,8 +44,8 @@ nxt_test="$CC $CFLAGS $NXT_CFLAGS $NXT_CC_OPT $NXT_TEST_CFLAGS \
 
 /bin/sh -c "($nxt_test || true)" >> $NXT_AUTOCONF_ERR 2>&1
 
-
 if [ -x $NXT_AUTOTEST ]; then
+    $echo "2"
 
     case "$nxt_feature_run" in
 

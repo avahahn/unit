@@ -10,7 +10,6 @@
 #include <nxt_regex.h>
 #include <nxt_otel.h>
 
-
 typedef enum {
     NXT_HTTP_UNSET = -1,
     NXT_HTTP_INVALID = 0,

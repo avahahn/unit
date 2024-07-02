@@ -2,10 +2,20 @@
  * Copyright (C) F5, Inc.
  */
 
-#include <nxt_http_parse.h>
-
-#if !defined _NXT_OTEL_H_INCLUDED_ && defined NXT_OTEL
+#ifndef _NXT_OTEL_H_INCLUDED_
 #define _NXT_OTEL_H_INCLUDED_
+
+#if (NXT_HAVE_OTEL)
+
+#include <nxt_router.h>
+
+// forward declared
+struct nxt_http_field_t;
+
+extern void   nxt_otel_send_trace(void *trace);
+extern void * nxt_otel_get_or_create_trace(u_char *trace_id);
+extern void   nxt_otel_init(void (*)(u_char*));
+extern void   nxt_otel_copy_traceparent(u_char *buf, void *trace);
 
 /* nxt_otel_status_t
  * more efficient than a single handler state struct
@@ -19,23 +29,23 @@ typedef enum {
     NXT_OTEL_ERROR_STATE,
 } nxt_otel_status_t;
 
-/* nxt_otel_t
+/* nxt_otel_state_t
  * cache of trace data needed per request and
  * includes indicator as to current flow state
  */
 typedef struct {
-    char              *version;
-    char              *trace_id;
-    char              *parent_id;
-    char              *trace_flags;
+    u_char              *trace_id, *version, *parent_id, *trace_flags;
+    void              *trace;
     nxt_otel_status_t status;
     nxt_str_t         trace_state;
 } nxt_otel_state_t;
 
 int nxt_otel_library_linkable();
 int nxt_otel_link_library();
-void nxt_otel_test_and_call_state(nxt_http_request_t *);
-nxt_int_t nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field, uintptr_t data);
-nxt_int_t nxt_otel_parse_tracestate(void *ctx, nxt_http_field_t *field, uintptr_t data);
+void nxt_otel_test_and_call_state(nxt_task_t *, nxt_http_request_t *);
+nxt_int_t nxt_otel_parse_traceparent(void *, nxt_http_field_t *, uintptr_t);
+nxt_int_t nxt_otel_parse_tracestate(void *, nxt_http_field_t *, uintptr_t);
+
+#endif // NXT_HAVE_OTEL
 
 #endif // _NXT_OTEL_H_INCLUDED_

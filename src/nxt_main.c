@@ -5,11 +5,16 @@
  */
 
 #include <nxt_main.h>
+#include <nxt_otel.h>
 #include <nxt_runtime.h>
 
 
 extern char  **environ;
 
+
+void otel_phase1_log_callback(char *arg) {
+  printf("otel: %s", arg);
+}
 
 int nxt_cdecl
 main(int argc, char **argv)
