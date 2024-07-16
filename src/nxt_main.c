@@ -12,8 +12,8 @@
 extern char  **environ;
 
 
-void otel_phase1_log_callback(char *arg) {
-  printf("otel: %s", arg);
+void otel_phase1_log_callback(u_char *arg) {
+  printf("otel: %s", (char *) arg);
 }
 
 int nxt_cdecl
@@ -28,6 +28,9 @@ main(int argc, char **argv)
 //    nxt_main_log.level = NXT_LOG_INFO;
 
     nxt_main_log.handler = nxt_log_time_handler;
+
+
+    nxt_otel_init(otel_phase1_log_callback);
 
     ret = nxt_runtime_create(&nxt_main_task);
 

@@ -159,7 +159,7 @@ nxt_otel_find_or_set_trace(nxt_task_t *task, void *obj, void *data)
     }
 
     name = nxt_mp_zalloc(r->mem_pool, 11);
-    val = nxt_mp_zalloc(r->mem_pool, 53);
+    val = nxt_mp_zalloc(r->mem_pool, 55);
     if (!val || !name) {
       /* let it go blank here.
        * span still gets populated and sent
@@ -178,7 +178,7 @@ nxt_otel_find_or_set_trace(nxt_task_t *task, void *obj, void *data)
       f->name = val;
       f->name_length = 11;
       f->value = val;
-      f->value_length = 53;
+      f->value_length = 55;
     }
 }
 
@@ -199,7 +199,7 @@ nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field, uintptr_t data)
      */
 
     r = ctx;
-    if (field->value_length != 52) {
+    if (field->value_length != 54) {
         goto error_state;
     }
 
