@@ -10,12 +10,14 @@
 #include <nxt_work_queue.h>
 #include <nxt_main.h>
 
-static inline void nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *);
+#define NXT_OTEL_TRACEPARENT_LEN 55
+
+static inline void nxt_otel_trace_and_span_init(nxt_task_t *, nxt_http_request_t *);
 static inline void nxt_otel_span_collect(nxt_task_t *, nxt_http_request_t *);
 static void nxt_otel_send_trace_and_span_data(nxt_task_t *, void *, void *);
-static void nxt_otel_span_add_header(nxt_http_request_t *);
+static void nxt_otel_span_add_headers(nxt_task_t *, nxt_http_request_t *);
 static void nxt_otel_span_add_body(nxt_http_request_t *);
-static void nxt_otel_error(nxt_http_request_t *);
+static void nxt_otel_error(nxt_task_t *, nxt_http_request_t *);
 
 /*int nxt_otel_library_linkable()
 {
@@ -41,7 +43,7 @@ nxt_otel_test_and_call_state(nxt_task_t *t, nxt_http_request_t *r)
         nxt_otel_trace_and_span_init(t, r);
         break;
     case NXT_OTEL_HEADER_STATE:
-        nxt_otel_span_add_header(r);
+      nxt_otel_span_add_headers(t, r);
         break;
     case NXT_OTEL_BODY_STATE:
         nxt_otel_span_add_body(r);
@@ -50,7 +52,7 @@ nxt_otel_test_and_call_state(nxt_task_t *t, nxt_http_request_t *r)
         nxt_otel_span_collect(t, r);
         break;
     case NXT_OTEL_ERROR_STATE:
-        nxt_otel_error(r);
+        nxt_otel_error(t, r);
         break;
     }
 }
@@ -66,49 +68,56 @@ nxt_otel_state_transition(nxt_otel_state_t *state, nxt_otel_status_t status)
 static inline void
 nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *r)
 {
-    nxt_http_field_t *f;
-    u_char *val, *name;
-
     r->otel->trace =
       nxt_otel_get_or_create_trace(r->otel->trace_id);
     if (!r->otel->trace) {
+      nxt_log(t, NXT_LOG_ERR, "error generating otel span");
       nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
       return;
-    }
-
-    name = nxt_mp_zalloc(r->mem_pool, 11);
-    val = nxt_mp_zalloc(r->mem_pool, 56);
-    if (!val || !name) {
-      /* let it go blank here.
-       * span still gets populated and sent
-       * but data is not propagated to peer or app.
-       *
-       * TODO: Log this
-       */
-      return;
-    }
-
-    nxt_memcpy(name, "traceparent", 11);
-    nxt_otel_copy_traceparent(val, r->otel->trace);
-
-    f = nxt_list_add(r->resp.fields);
-    if (f) {
-      f->name = val;
-      f->name_length = 11;
-      f->value = val;
-      f->value_length = 56;
     }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_HEADER_STATE);
 }
 
 static void
-nxt_otel_span_add_header(nxt_http_request_t *r)
+nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
 {
-    /* TODO:
-     * 1. extract specific headers (not all of r->fields)
-     * 2. use rust library func to put them in new span
-     */
+  nxt_http_field_t *f, *cur;
+  u_char *val;
+
+    if (!r->otel || !r->otel->trace) {
+        nxt_log(t, NXT_LOG_ERR, "no trace to add events to!");
+        nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
+        return;
+    }
+
+    val = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
+    if (!val) {
+      /* let it go blank here.
+       * span still gets populated and sent
+       * but data is not propagated to peer or app.
+       */
+      nxt_log(t, NXT_LOG_ERR,
+              "couldnt allocate traceparent header. span will not propagate");
+      goto header_copy;
+    }
+
+    nxt_otel_copy_traceparent(val, r->otel->trace);
+
+    f = nxt_list_add(r->fields);
+    if (f) {
+      nxt_http_field_name_set(f, "traceparent");
+      f->value = val;
+      f->value_length = nxt_strlen(val);
+    } else {
+      nxt_log(t, NXT_LOG_ERR,
+              "couldnt allocate traceparent header. span will not propagate");
+    }
+
+ header_copy:
+    nxt_list_each(cur, r->fields) {
+        nxt_otel_add_event_to_trace(r->otel, cur->name, cur->value);
+    } nxt_list_loop;
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_BODY_STATE);
 }
@@ -120,6 +129,9 @@ nxt_otel_span_add_body(nxt_http_request_t *r)
      * 1. extract body length and total request processing time
      * 2. use rust library func to put these in new span
      */
+    if (r->otel->trace) {
+        nxt_otel_end_span(r->otel->trace);
+    }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_COLLECT_STATE);
 }
@@ -133,16 +145,12 @@ nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
 }
 
 static void
-nxt_otel_error(nxt_http_request_t *r)
+nxt_otel_error(nxt_task_t *t, nxt_http_request_t *r)
 {
     // purposefully not using state transition helper
     r->otel->status = 0;
-
-    /* TODO:
-     * 1. log error
-     * 2. trigger rust library func to release any references to trace or span data
-     * 3. make null the reference to trace in r->otel
-     */
+    nxt_log(t, NXT_LOG_ERR, "otel error condition");
+    // if r->otel->trace it WILL leak here.
 }
 
 static void
@@ -151,10 +159,11 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
     nxt_http_request_t *r;
     r = obj;
 
+    nxt_log(task, NXT_LOG_DEBUG, "sending otel span");
+
     if (!r->otel->trace) {
-        // nxt_otel_find_or_set_trace has not finished.
-        // requeue and return.
-        nxt_otel_span_collect(task, r);
+        nxt_log(task, NXT_LOG_ERR, "otel error: no trace to send!");
+        nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
         return;
     }
 
@@ -180,7 +189,7 @@ nxt_otel_parse_traceparent(void *ctx, nxt_http_field_t *field, uintptr_t data)
      */
 
     r = ctx;
-    if (field->value_length != 54) {
+    if (field->value_length != NXT_OTEL_TRACEPARENT_LEN) {
         goto error_state;
     }
 

@@ -3,13 +3,13 @@ use std::sync::{Mutex, Arc, OnceLock};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::time::Duration;
+
 use opentelemetry::trace::{SpanKind, SpanBuilder, SpanId, TraceId, Span, Tracer};
 use opentelemetry_sdk::trace::{Span as SpanImpl, Tracer as TracerImpl};
-use lazy_static::lazy_static;
-use opentelemetry::KeyValue;
-use opentelemetry_otlp::Protocol::{HttpBinary};
-use opentelemetry_otlp::{WithExportConfig};
 use opentelemetry_sdk::Resource;
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::{WithExportConfig, Protocol::HttpBinary};
+
 
 // otel_endpoint is hardcoded for proof of concept purposes.
 const OTEL_TRACES_ENDPOINT: &str = "http://lgtm:4318/v1/traces";
@@ -51,8 +51,6 @@ unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
             log_callback(CString::from_vec_unchecked(
                 "otel exporter has been initialised".as_bytes().to_vec()
             ).into_raw() as _);
-
-            eprintln!("supposedly we have init");
         }
     }
 }
@@ -69,24 +67,8 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
         "00-{:032x}-{:016x}-{:02x}",
         (*span).span_context().trace_id(), // 16 chars, 32 hex
         (*span).span_context().span_id(), // 8 byte, 16 hex
-        (*span).span_context().trace_flags() // 1 char, 2 hex ???
+        (*span).span_context().trace_flags() // 1 char, 2 hex
     );
-
-    // 2+1+32+1+16+1+2 == 3+32+17+3 = 35+20 = 55
-    // 16+32+2+2+3 = 48+4+3 = 52+3 = 54 + nullterm
-
-    eprintln!("rust lib debug console log\ntp: {:?}\n
-    tid: {:?}\n
-    spid: {:?}\n
-    tf: {:?}\n
-    is ascii: {:?}\n
-    how long is this thing: {:?}",
-    traceparent,
-    (*span).span_context().trace_id(),
-    (*span).span_context().span_id(),
-    (*span).span_context().trace_flags(),
-             traceparent.is_ascii(),
-            traceparent.len());
 
     assert!(traceparent.len() == 55);
 
@@ -94,45 +76,31 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
     // set null terminator
     *buf.add(54) = b'\0' as _;
 }
-// its on the caller to pass in a buf of proper length
-#[no_mangle]
-pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
-    if buf.is_null() || span.is_null() {
-        return;
-    }
-    let traceparent = format!(
-        "00-{:032x}-{:016x}-{:02x}",
-        (*span).span_context().trace_id(),
-        (*span).span_context().span_id(),
-        (*span).span_context().trace_flags()
-    ).to_ascii_lowercase();
-
-    assert!(traceparent.len() == 55);
-
-    std::ptr::copy_nonoverlapping(traceparent.as_bytes().as_ptr(), buf as _, 55);
-    // set null terminator
-    *buf.add(56) = b'\0' as _;
-}
 
 #[no_mangle]
 pub unsafe fn nxt_otel_add_event_to_trace(
     trace: *mut SpanImpl,
-    _key: *mut i8,
-    _val: *mut i8,
+    key: *mut i8,
+    val: *mut i8,
 ) {
-    // damage nothing on an improper call
-    if !_key.is_null() &&
-        !_val.is_null() &&
+    if !key.is_null() &&
+        !val.is_null() &&
         !trace.is_null() {
-            // TODO: generate an event attached to the span
-            let key = CStr::from_ptr(_key as _).to_string_lossy();
-            let val = CStr::from_ptr(_val as _).to_string_lossy();
+            let key = CStr::from_ptr(key as _).to_string_lossy();
+            let val = CStr::from_ptr(val as _).to_string_lossy();
 
-            (*trace).add_event(String::from("from_c"), vec![KeyValue::new(
-                key,
-                val
-            )]);
+            (*trace).add_event(
+                String::from("from_c"),
+                vec![KeyValue::new(key, val)]
+            );
         }
+}
+
+#[no_mangle]
+pub unsafe fn nxt_otel_end_span(
+    trace: *mut SpanImpl,
+) {
+    (*trace).end();
 }
 
 #[no_mangle]
@@ -183,4 +151,5 @@ pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
      * now one, we can decrement manually to ensure
      * that is goes out of scope here.
      */
+    eprintln!("weak: {} strong: {}\n", Arc::weak_count(&arc_span), Arc::strong_count(&arc_span));
 }
