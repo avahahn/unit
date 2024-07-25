@@ -1,20 +1,20 @@
-use std::collections::HashMap;
-use std::sync::{Mutex, Arc, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::time::Duration;
 
-use opentelemetry::trace::{SpanKind, SpanBuilder, SpanId, TraceId, Span, Tracer};
-use opentelemetry_sdk::trace::{Span as SpanImpl, Tracer as TracerImpl};
+//use opentelemetry::global;
+//use opentelemetry::global::{BoxedTracer, BoxedSpan};
+use opentelemetry::trace::{SpanKind, SpanBuilder, TraceId, Span, Tracer, TracerProvider};
+use opentelemetry_sdk::trace::{Span as SpanImpl, TracerProvider as TracerProviderImpl};
 use opentelemetry_sdk::Resource;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::{WithExportConfig, Protocol::HttpBinary};
 
-
 // otel_endpoint is hardcoded for proof of concept purposes.
 const OTEL_TRACES_ENDPOINT: &str = "http://lgtm:4318/v1/traces";
 
-static GLOBAL_TRACER: OnceLock<TracerImpl> = OnceLock::new();
+static GLOBAL_TRACER_PROVIDER: OnceLock<TracerProviderImpl> = OnceLock::new();
 
 // potentially returns an error message
 // TODO: pass in a callback to log error instead of broken bullshit
@@ -31,7 +31,7 @@ unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
         .tracing()
         .with_trace_config(
             opentelemetry_sdk::trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                opentelemetry_semantic_conventions::resource::SERVICE_NAME, "rust-lib-called-from-C",
+                opentelemetry_semantic_conventions::resource::SERVICE_NAME, "NGINX Unit",
             )])),
         )
         .with_exporter(otlp_exporter)
@@ -46,8 +46,8 @@ unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
                     .to_vec()
             ).into_raw() as _
         ),
-        Ok(tracer) => {
-            GLOBAL_TRACER.get_or_init(move || tracer);
+        Ok(t) => {
+            GLOBAL_TRACER_PROVIDER.get_or_init(move || t);
             log_callback(CString::from_vec_unchecked(
                 "otel exporter has been initialised".as_bytes().to_vec()
             ).into_raw() as _);
@@ -86,13 +86,15 @@ pub unsafe fn nxt_otel_add_event_to_trace(
     if !key.is_null() &&
         !val.is_null() &&
         !trace.is_null() {
-            let key = CStr::from_ptr(key as _).to_string_lossy();
-            let val = CStr::from_ptr(val as _).to_string_lossy();
+            let key = CStr::from_ptr(key as _)
+                .to_string_lossy();
+            let val = CStr::from_ptr(val as _)
+                .to_string_lossy();
 
             (*trace).add_event(
                 String::from("from_c"),
                 vec![KeyValue::new(key, val)]
-            );
+             );
         }
 }
 
@@ -117,8 +119,8 @@ pub unsafe fn nxt_otel_get_or_create_trace(
     }
 
     let span: SpanImpl;
-    if let Some(tracer) = GLOBAL_TRACER.get() {
-        span = tracer.build(SpanBuilder {
+    if let Some(provider) = GLOBAL_TRACER_PROVIDER.get() {
+        span = provider.tracer("NGINX Unit").build(SpanBuilder {
             trace_id: trace_key,
             span_kind: Some(SpanKind::Server),
             ..Default::default()
