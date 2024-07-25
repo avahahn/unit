@@ -43,7 +43,7 @@ nxt_otel_test_and_call_state(nxt_task_t *t, nxt_http_request_t *r)
         nxt_otel_trace_and_span_init(t, r);
         break;
     case NXT_OTEL_HEADER_STATE:
-      nxt_otel_span_add_headers(t, r);
+        nxt_otel_span_add_headers(t, r);
         break;
     case NXT_OTEL_BODY_STATE:
         nxt_otel_span_add_body(r);
@@ -69,11 +69,12 @@ static inline void
 nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *r)
 {
     r->otel->trace =
-      nxt_otel_get_or_create_trace(r->otel->trace_id);
-    if (!r->otel->trace) {
-      nxt_log(t, NXT_LOG_ERR, "error generating otel span");
-      nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
-      return;
+        nxt_otel_get_or_create_trace(r->otel->trace_id);
+    if (!r->otel->trace)
+    {
+        nxt_log(t, NXT_LOG_ERR, "error generating otel span");
+        nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
+        return;
     }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_HEADER_STATE);
@@ -85,7 +86,10 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
   nxt_http_field_t *f, *cur;
   u_char *val;
 
-    if (!r->otel || !r->otel->trace) {
+    nxt_log(t, NXT_LOG_DEBUG, "adding headers");
+
+    if (!r->otel || !r->otel->trace)
+    {
         nxt_log(t, NXT_LOG_ERR, "no trace to add events to!");
         nxt_otel_state_transition(r->otel, NXT_OTEL_ERROR_STATE);
         return;
@@ -117,7 +121,10 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
  header_copy:
     nxt_list_each(cur, r->fields) {
         nxt_otel_add_event_to_trace(r->otel, cur->name, cur->value);
-    } nxt_list_loop;
+    }
+    nxt_list_loop;
+
+    nxt_log(t, NXT_LOG_DEBUG, "headers added, state transition to body");
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_BODY_STATE);
 }
@@ -139,6 +146,8 @@ nxt_otel_span_add_body(nxt_http_request_t *r)
 static inline void
 nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
 {
+    nxt_log(t, NXT_LOG_DEBUG, "collecting span by adding the task to a work queue");
+
     nxt_work_queue_add(&t->thread->engine->fast_work_queue,
                        nxt_otel_send_trace_and_span_data, t, r, NULL);
     nxt_otel_state_transition(r->otel, 0);
