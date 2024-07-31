@@ -148,7 +148,7 @@ nxt_otel_span_add_body(nxt_http_request_t *r)
 static inline void
 nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
 {
-    nxt_log(t, NXT_LOG_DEBUG, "collecting span by adding the task to a work queue");
+    nxt_log(t, NXT_LOG_DEBUG, "collecting span by adding the task to the fast work queue");
 
     nxt_work_queue_add(&t->thread->engine->fast_work_queue,
                        nxt_otel_send_trace_and_span_data, t, r, NULL);
@@ -179,7 +179,11 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
     }
 
     nxt_otel_state_transition(r->otel, 0);
+
+    nxt_log(task, NXT_LOG_DEBUG, "state transition to 0 happened, about to send trace");
     nxt_otel_send_trace(r->otel->trace);
+
+    nxt_log(task, NXT_LOG_DEBUG, "sent trace, setting trace property to null");
     r->otel->trace = NULL;
 }
 

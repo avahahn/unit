@@ -137,6 +137,7 @@ pub unsafe fn nxt_otel_get_or_create_trace(
 pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
     // damage nothing on an improper call
     if trace.is_null() {
+        eprintln!("trace was null, returning");
         return;
     }
 
@@ -145,6 +146,7 @@ pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
      * nxt_otel_get_or_create_trace
      */
     let arc_span = Arc::from_raw(trace);
+    eprintln!("got the arc span from raw from the trace pointer");
 
     /* simple exporter will export spans when dropped
      * aka at end of this function
@@ -153,5 +155,10 @@ pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
      * now one, we can decrement manually to ensure
      * that is goes out of scope here.
      */
-    eprintln!("weak: {} strong: {}\n", Arc::weak_count(&arc_span), Arc::strong_count(&arc_span));
+    eprintln!(
+        "weak: {} strong: {}\n",
+        Arc::weak_count(&arc_span),
+        Arc::strong_count(&arc_span)
+    );
+    eprintln!("dropping reference to span");
 }
