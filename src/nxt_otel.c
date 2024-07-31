@@ -132,13 +132,15 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
 static void
 nxt_otel_span_add_body(nxt_http_request_t *r)
 {
-    /* TODO:
-     * 1. extract body length and total request processing time
-     * 2. use rust library func to put these in new span
-     */
-    if (r->otel->trace) {
-        nxt_otel_end_span(r->otel->trace);
-    }
+
+    // /* TODO:
+    //  * 1. extract body length and total request processing time
+    //  * 2. use rust library func to put these in new span
+    //  */
+    // if (r->otel->trace)
+    // {
+    //     nxt_otel_end_span(r->otel->trace);
+    // }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_COLLECT_STATE);
 }
