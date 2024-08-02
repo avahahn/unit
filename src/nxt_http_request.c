@@ -598,8 +598,6 @@ nxt_http_request_ready(nxt_task_t *task, void *obj, void *data)
 
 #if (NXT_HAVE_OTEL)
     nxt_otel_test_and_call_state(task, r);
-    // temporary for phase 1 demo: call again to emit spans
-    nxt_otel_test_and_call_state(task, r);
 #endif
 
     if (r->chunked) {
@@ -790,6 +788,10 @@ nxt_http_request_send(nxt_task_t *task, nxt_http_request_t *r, nxt_buf_t *out)
     if (nxt_fast_path(r->proto.any != NULL)) {
         nxt_http_proto[r->protocol].send(task, r, out);
     }
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_test_and_call_state(task, r);
+#endif
 }
 
 
@@ -869,6 +871,11 @@ nxt_http_request_error_handler(nxt_task_t *task, void *obj, void *data)
     nxt_debug(task, "http request error handler");
 
     r->error = 1;
+
+#if (NXT_HAVE_OTEL)
+    // TODO
+    // PHASE 2: add error event to span
+#endif
 
     if (nxt_fast_path(proto.any != NULL)) {
         nxt_http_proto[r->protocol].discard(task, r, nxt_http_buf_last(r));

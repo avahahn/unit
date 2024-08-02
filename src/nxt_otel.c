@@ -14,7 +14,6 @@
 
 static inline void nxt_otel_trace_and_span_init(nxt_task_t *, nxt_http_request_t *);
 static inline void nxt_otel_span_collect(nxt_task_t *, nxt_http_request_t *);
-static void nxt_otel_send_trace_and_span_data(nxt_task_t *, void *, void *);
 static void nxt_otel_span_add_headers(nxt_task_t *, nxt_http_request_t *);
 static void nxt_otel_span_add_body(nxt_http_request_t *);
 static void nxt_otel_error(nxt_task_t *, nxt_http_request_t *);
@@ -137,31 +136,8 @@ nxt_otel_span_add_body(nxt_http_request_t *r)
     //  * 1. extract body length and total request processing time
     //  * 2. use rust library func to put these in new span
     //  */
-    // if (r->otel->trace)
-    // {
-    //     nxt_otel_end_span(r->otel->trace);
-    // }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_COLLECT_STATE);
-}
-
-static inline void
-nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
-{
-    nxt_log(t, NXT_LOG_DEBUG, "collecting span by adding the task to the fast work queue");
-
-    nxt_work_queue_add(&t->thread->engine->fast_work_queue,
-                       nxt_otel_send_trace_and_span_data, t, r, NULL);
-    nxt_otel_state_transition(r->otel, 0);
-}
-
-static void
-nxt_otel_error(nxt_task_t *t, nxt_http_request_t *r)
-{
-    // purposefully not using state transition helper
-    r->otel->status = 0;
-    nxt_log(t, NXT_LOG_ERR, "otel error condition");
-    // if r->otel->trace it WILL leak here.
 }
 
 static void
@@ -185,6 +161,24 @@ nxt_otel_send_trace_and_span_data(nxt_task_t *task, void *obj, void *data)
 
     nxt_log(task, NXT_LOG_DEBUG, "sent trace, setting trace property to null");
     r->otel->trace = NULL;
+}
+
+static inline void
+nxt_otel_span_collect(nxt_task_t *t, nxt_http_request_t *r)
+{
+    nxt_log(t, NXT_LOG_DEBUG, "collecting span by adding the task to the fast work queue");
+    nxt_work_queue_add(&t->thread->engine->fast_work_queue,
+                       nxt_otel_send_trace_and_span_data, t, r, NULL);
+    nxt_otel_state_transition(r->otel, 0);
+}
+
+static void
+nxt_otel_error(nxt_task_t *t, nxt_http_request_t *r)
+{
+    // purposefully not using state transition helper
+    r->otel->status = 0;
+    nxt_log(t, NXT_LOG_ERR, "otel error condition");
+    // if r->otel->trace it WILL leak here.
 }
 
 nxt_int_t

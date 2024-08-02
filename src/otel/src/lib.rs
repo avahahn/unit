@@ -95,11 +95,6 @@ pub unsafe fn nxt_otel_add_event_to_trace(
 }
 
 #[no_mangle]
-pub unsafe fn nxt_otel_end_span(trace: *mut SpanImpl) {
-    (*trace).end();
-}
-
-#[no_mangle]
 pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut SpanImpl {
     let mut trace_key = None;
     let trace_cstr: &CStr;

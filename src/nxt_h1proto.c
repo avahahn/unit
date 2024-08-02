@@ -1689,6 +1689,11 @@ nxt_h1p_request_discard(nxt_task_t *task, nxt_http_request_t *r,
 
     nxt_sendbuf_drain(task, wq, b);
     nxt_sendbuf_drain(task, wq, last);
+
+#if (NXT_HAVE_OTEL)
+    // TODO Phase 2: Test
+    nxt_otel_test_and_call_state(task, r);
+#endif
 }
 
 
