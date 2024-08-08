@@ -1,60 +1,82 @@
+use once_cell::sync::Lazy;
+use opentelemetry::trace::{Span, SpanBuilder, SpanKind, TraceId, Tracer, TracerProvider};
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{
+    runtime,
+    trace::{Config, Span as SpanImpl, TracerProvider as TracerProviderImpl},
+    Resource,
+};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use opentelemetry::trace::{
-    Span, SpanBuilder, SpanKind, TraceId, Tracer, TracerProvider,
-};
-use opentelemetry::KeyValue;
-use opentelemetry_otlp::{Protocol::HttpBinary, WithExportConfig};
-use opentelemetry_sdk::trace::{Config, Span as SpanImpl, TracerProvider as TracerProviderImpl};
-use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::BatchConfigBuilder;
+use tokio::runtime::Runtime;
 
 // otel_endpoint is hardcoded for proof of concept purposes.
-const OTEL_TRACES_ENDPOINT: &str = "http://lgtm:4318/v1/traces";
+const OTEL_TRACES_ENDPOINT: &str = "http://lgtm:4317/";
 
 static GLOBAL_TRACER_PROVIDER: OnceLock<TracerProviderImpl> = OnceLock::new();
+static mut GLOBAL_TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
+static RESOURCE: Lazy<Resource> = Lazy::new(|| {
+    Resource::new(vec![KeyValue::new(
+        opentelemetry_semantic_conventions::resource::SERVICE_NAME,
+        "NGINX Unit",
+    )])
+});
 
 // potentially returns an error message
 #[no_mangle]
 unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
-    let otlp_exporter = opentelemetry_otlp::new_exporter()
-        .http()
-        .with_endpoint(OTEL_TRACES_ENDPOINT)
-        .with_protocol(HttpBinary)
-        .with_timeout(Duration::new(10, 0));
+    GLOBAL_TOKIO_RUNTIME.get_or_init(|| Runtime::new().unwrap());
 
-    // Then pass it into pipeline builder
-    let res = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(Config::default().with_resource(
-            Resource::new(vec![KeyValue::new(
-                opentelemetry_semantic_conventions::resource::SERVICE_NAME,
-                "NGINX Unit",
-            )]),
-        ))
-        .with_exporter(otlp_exporter)
-        .install_simple();
+    if let Some(rt) = GLOBAL_TOKIO_RUNTIME.get_mut() {
+        rt.block_on(async {
+            let otlp_exporter = opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(OTEL_TRACES_ENDPOINT)
+                .with_timeout(Duration::new(10, 0));
 
-    // unwrap
-    match res {
-        Err(e) => log_callback(
-            CString::from_vec_unchecked(e.to_string().as_bytes().to_vec())
-                .into_raw() as _,
-        ),
-        Ok(t) => {
-            GLOBAL_TRACER_PROVIDER.get_or_init(move || t);
-            log_callback(
-                CString::from_vec_unchecked(
-                    "otel exporter has been initialised".as_bytes().to_vec(),
+            // Then pass it into pipeline builder
+            let res = opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(
+                    Config::default()
+                        .with_resource(RESOURCE.clone())
                 )
-                .into_raw() as _,
-            );
-        }
+                .with_batch_config(
+                    BatchConfigBuilder::default()
+                        .with_max_concurrent_exports(1)
+                        .with_max_export_batch_size(4)
+                        .with_max_export_timeout(Duration::from_secs(5))
+                        .build()
+                )
+                .install_batch(runtime::Tokio);
+
+            // unwrap
+            match res {
+                Err(e) => log_callback(
+                    CString::from_vec_unchecked(e.to_string().as_bytes().to_vec()).into_raw() as _,
+                ),
+                Ok(t) => {
+                    eprintln!("we do have an otel exporter");
+                    GLOBAL_TRACER_PROVIDER.get_or_init(move || t);
+                    log_callback(
+                        CString::from_vec_unchecked(
+                            "otel exporter has been initialised".as_bytes().to_vec(),
+                        ).into_raw() as _,
+                    );
+                }
+            }
+        });
     }
 }
 
-// it's on the caller to pass in a buf of proper length
+/// # Safety
+///
+/// None, satisfying clippy.
 #[no_mangle]
 pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
     if buf.is_null() || span.is_null() {
@@ -63,37 +85,34 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
 
     let traceparent = format!(
         "00-{:032x}-{:016x}-{:02x}",
-        (*span).span_context().trace_id(), // 16 chars, 32 hex
-        (*span).span_context().span_id(),  // 8 byte, 16 hex
+        (*span).span_context().trace_id(),    // 16 chars, 32 hex
+        (*span).span_context().span_id(),     // 8 byte, 16 hex
         (*span).span_context().trace_flags()  // 1 char, 2 hex
     );
 
     assert_eq!(traceparent.len(), 55);
 
-    ptr::copy_nonoverlapping(
-        traceparent.as_bytes().as_ptr(),
-        buf as _,
-        55,
-    );
+    ptr::copy_nonoverlapping(traceparent.as_bytes().as_ptr(), buf as _, 55);
     // set null terminator
     *buf.add(54) = b'\0' as _;
 }
 
+/// # Safety
+///
+/// None, satisfying clippy.
 #[no_mangle]
-pub unsafe fn nxt_otel_add_event_to_trace(
-    trace: *mut SpanImpl,
-    key: *mut i8,
-    val: *mut i8,
-) {
+pub unsafe fn nxt_otel_add_event_to_trace(trace: *mut SpanImpl, key: *mut i8, val: *mut i8) {
     if !key.is_null() && !val.is_null() && !trace.is_null() {
         let key = CStr::from_ptr(key as _).to_string_lossy();
         let val = CStr::from_ptr(val as _).to_string_lossy();
 
-        (*trace)
-            .add_event(String::from("from_c"), vec![KeyValue::new(key, val)]);
+        (*trace).add_event(String::from("from_c"), vec![KeyValue::new(key, val)]);
     }
 }
 
+/// # Safety
+///
+/// None, satisfying clippy.
 #[no_mangle]
 pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut SpanImpl {
     let mut trace_key = None;
@@ -119,33 +138,40 @@ pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut SpanImpl {
     Arc::<SpanImpl>::into_raw(Arc::new(span)) as *mut SpanImpl
 }
 
+/// # Safety
+///
+/// None, satisfying clippy.
 #[no_mangle]
-#[tokio::main]
-pub async unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
+pub unsafe fn nxt_otel_send_trace(trace: *mut SpanImpl) {
     // damage nothing on an improper call
     if trace.is_null() {
         eprintln!("trace was null, returning");
         return;
     }
 
-    /* memory needs to be accounted for via arc here
-     * see the final return statement from
-     * nxt_otel_get_or_create_trace
-     */
-    let arc_span = Arc::from_raw(trace);
-    eprintln!("got the arc span from raw from the trace pointer");
+    if let Some(rt) = GLOBAL_TOKIO_RUNTIME.get_mut() {
+        rt.block_on(async
+            {
+                /* memory needs to be accounted for via arc here
+                 * see the final return statement from
+                 * nxt_otel_get_or_create_trace
+                 */
+                let arc_span = Arc::from_raw(trace);
+                eprintln!("got the arc span from raw from the trace pointer");
 
-    /* simple exporter will export spans when dropped
-     * aka at end of this function
-     * One final thing we can do here is check
-     * the strong count of the Arc. If it is not
-     * now one, we can decrement manually to ensure
-     * that is goes out of scope here.
-     */
-    eprintln!(
-        "weak: {} strong: {}\n",
-        Arc::weak_count(&arc_span),
-        Arc::strong_count(&arc_span)
-    );
-    eprintln!("dropping reference to span");
+                /* simple exporter will export spans when dropped
+                 * aka at end of this function
+                 * One final thing we can do here is check
+                 * the strong count of the Arc. If it is not
+                 * now one, we can decrement manually to ensure
+                 * that is goes out of scope here.
+                 */
+                eprintln!(
+                    "weak: {} strong: {}\n",
+                    Arc::weak_count(&arc_span),
+                    Arc::strong_count(&arc_span)
+                );
+                eprintln!("dropping reference to span");
+            });
+    }
 }
