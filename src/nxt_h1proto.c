@@ -1772,7 +1772,7 @@ nxt_h1p_conn_request_send_timeout(nxt_task_t *task, void *obj, void *data)
     c = nxt_write_timer_conn(timer);
     c->block_write = 1;
     h1p = c->socket.data;
-
+ 
     nxt_h1p_request_error(task, h1p, h1p->request);
 }
 
@@ -1806,8 +1806,8 @@ nxt_h1p_request_close(nxt_task_t *task, nxt_http_proto_t proto,
     nxt_h1proto_t  *h1p;
 
     nxt_debug(task, "h1p request close");
-
     h1p = proto.h1;
+
     h1p->keepalive &= !h1p->request->inconsistent;
     h1p->request = NULL;
 
@@ -1833,6 +1833,12 @@ nxt_h1p_conn_sent(nxt_task_t *task, void *obj, void *data)
 {
     nxt_conn_t          *c;
     nxt_event_engine_t  *engine;
+    nxt_http_request_t  *r;
+    r = ((nxt_h1proto_t *) data)->request;
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_test_and_call_state(task, r);
+#endif
 
     c = obj;
 

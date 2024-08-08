@@ -788,10 +788,6 @@ nxt_http_request_send(nxt_task_t *task, nxt_http_request_t *r, nxt_buf_t *out)
     if (nxt_fast_path(r->proto.any != NULL)) {
         nxt_http_proto[r->protocol].send(task, r, out);
     }
-
-#if (NXT_HAVE_OTEL)
-    nxt_otel_test_and_call_state(task, r);
-#endif
 }
 
 

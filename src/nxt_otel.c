@@ -3,6 +3,8 @@
  * Copyright (C) F5, Inc.
  */
 
+#include <math.h>
+
 #include <nxt_router.h>
 #include <nxt_http.h>
 #include <nxt_otel.h>
@@ -11,6 +13,7 @@
 #include <nxt_main.h>
 
 #define NXT_OTEL_TRACEPARENT_LEN 55
+#define NXT_OTEL_BODY_SIZE_TAG "body size"
 
 static inline void nxt_otel_trace_and_span_init(nxt_task_t *, nxt_http_request_t *);
 static inline void nxt_otel_span_collect(nxt_task_t *, nxt_http_request_t *);
@@ -82,8 +85,8 @@ nxt_otel_trace_and_span_init(nxt_task_t *t, nxt_http_request_t *r)
 static void
 nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
 {
-  nxt_http_field_t *f, *cur;
-  u_char *val;
+    nxt_http_field_t *f, *cur;
+    u_char *traceval, *name_cur, *val_cur;
 
     nxt_log(t, NXT_LOG_DEBUG, "adding headers");
 
@@ -94,34 +97,40 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
         return;
     }
 
-    val = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
-    if (!val) {
-      /* let it go blank here.
-       * span still gets populated and sent
-       * but data is not propagated to peer or app.
-       */
-      nxt_log(t, NXT_LOG_ERR,
-              "couldnt allocate traceparent header. span will not propagate");
-      goto header_copy;
+    traceval = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
+    if (!traceval) {
+        /* let it go blank here.
+         * span still gets populated and sent
+         * but data is not propagated to peer or app.
+         */
+        nxt_log(t, NXT_LOG_ERR,
+                "couldnt allocate traceparent header. span will not propagate");
+        goto header_copy;
     }
 
-    nxt_otel_copy_traceparent(val, r->otel->trace);
+    nxt_otel_copy_traceparent(traceval, r->otel->trace);
 
     f = nxt_list_add(r->fields);
     if (f) {
-      nxt_http_field_name_set(f, "traceparent");
-      f->value = val;
-      f->value_length = nxt_strlen(val);
+        nxt_http_field_name_set(f, "traceparent");
+        f->value = traceval;
+        f->value_length = nxt_strlen(traceval);
     } else {
-      nxt_log(t, NXT_LOG_ERR,
-              "couldnt allocate traceparent header. span will not propagate");
+        nxt_log(t, NXT_LOG_ERR,
+                "couldnt allocate traceparent header. span will not propagate");
     }
 
  header_copy:
     nxt_list_each(cur, r->fields) {
-        nxt_otel_add_event_to_trace(r->otel, cur->name, cur->value);
-    }
-    nxt_list_loop;
+        // we need this in a null terminated format for the (easy and preferrable) FFI in Rust
+        name_cur = nxt_mp_zalloc(r->mem_pool, cur->name_length + 1);
+        val_cur = nxt_mp_zalloc(r->mem_pool, cur->value_length + 1);
+        if (name_cur && val_cur) {
+            strncpy((char *) name_cur, (char *) cur->name, cur->name_length);
+            strncpy((char *) val_cur, (char *) cur->value, cur->value_length);
+            nxt_otel_add_event_to_trace(r->otel->trace, name_cur, val_cur);
+        }
+    } nxt_list_loop;
 
     nxt_log(t, NXT_LOG_DEBUG, "headers added, state transition to body");
 
@@ -131,12 +140,20 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
 static void
 nxt_otel_span_add_body(nxt_http_request_t *r)
 {
+    size_t body_size, size_digits;
+    u_char *body_size_buf, *body_tag_buf;
 
-    // /* TODO:
-    //  * 1. extract body length and total request processing time
-    //  * 2. use rust library func to put these in new span
-    //  */
+    body_size = (r->body) ? nxt_buf_used_size(r->body) : 0;
+    size_digits = (!body_size) ? 1 : log10(body_size) + 1;
+    body_size_buf = nxt_mp_zalloc(r->mem_pool, size_digits + 1);
+    body_tag_buf = nxt_mp_zalloc(r->mem_pool, sizeof(NXT_OTEL_BODY_SIZE_TAG) + 1);
+    if (!body_size_buf || !body_tag_buf) {
+        return;
+    }
 
+    sprintf((char *) body_tag_buf, NXT_OTEL_BODY_SIZE_TAG);
+    sprintf((char *) body_size_buf, "%lu", body_size);
+    nxt_otel_add_event_to_trace(r->otel->trace, body_tag_buf, body_size_buf);
     nxt_otel_state_transition(r->otel, NXT_OTEL_COLLECT_STATE);
 }
 
@@ -179,6 +196,7 @@ nxt_otel_error(nxt_task_t *t, nxt_http_request_t *r)
     r->otel->status = 0;
     nxt_log(t, NXT_LOG_ERR, "otel error condition");
     // if r->otel->trace it WILL leak here.
+    // TODO Phase 2: drop trace without sending it somehow?
 }
 
 nxt_int_t
