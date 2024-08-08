@@ -2,3 +2,8 @@
 Makefile
 *.pyc
 __pycache__/
+.dir-locals.el
+compile_commands.json
+target/
+Cargo.lock
+.cache
