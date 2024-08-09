@@ -76,7 +76,7 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const SpanImpl) {
         55,
     );
     // set null terminator
-    *buf.add(54) = b'\0' as _;
+    *buf.add(55) = b'\0' as _;
 }
 
 #[no_mangle]
@@ -90,7 +90,7 @@ pub unsafe fn nxt_otel_add_event_to_trace(
         let val = CStr::from_ptr(val as _).to_string_lossy();
 
         (*trace)
-            .add_event(String::from("from_c"), vec![KeyValue::new(key, val)]);
+            .add_event(String::from("Unit Attribute"), vec![KeyValue::new(key, val)]);
     }
 }
 

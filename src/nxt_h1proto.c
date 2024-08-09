@@ -522,6 +522,10 @@ nxt_h1p_conn_request_init(nxt_task_t *task, void *obj, void *data)
             h1p->parser.discard_unsafe_fields = skcf->discard_unsafe_fields;
 
             nxt_h1p_conn_request_header_parse(task, c, h1p);
+#if (NXT_HAVE_OTEL)
+            nxt_otel_test_and_call_state(task, r);
+#endif
+
             return;
         }
 

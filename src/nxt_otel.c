@@ -88,7 +88,7 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
     nxt_http_field_t *f, *cur;
     u_char *traceval, *name_cur, *val_cur;
 
-    nxt_log(t, NXT_LOG_DEBUG, "adding headers");
+    nxt_log(t, NXT_LOG_DEBUG, "adding headers to trace");
 
     if (!r->otel || !r->otel->trace)
     {
@@ -97,32 +97,8 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
         return;
     }
 
-    traceval = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
-    if (!traceval) {
-        /* let it go blank here.
-         * span still gets populated and sent
-         * but data is not propagated to peer or app.
-         */
-        nxt_log(t, NXT_LOG_ERR,
-                "couldnt allocate traceparent header. span will not propagate");
-        goto header_copy;
-    }
-
-    nxt_otel_copy_traceparent(traceval, r->otel->trace);
-
-    f = nxt_list_add(r->fields);
-    if (f) {
-        nxt_http_field_name_set(f, "traceparent");
-        f->value = traceval;
-        f->value_length = nxt_strlen(traceval);
-    } else {
-        nxt_log(t, NXT_LOG_ERR,
-                "couldnt allocate traceparent header. span will not propagate");
-    }
-
- header_copy:
     nxt_list_each(cur, r->fields) {
-        // we need this in a null terminated format for the (easy and preferrable) FFI in Rust
+        // we need this in a continguous and null terminated segment of memory for Rust FFI
         name_cur = nxt_mp_zalloc(r->mem_pool, cur->name_length + 1);
         val_cur = nxt_mp_zalloc(r->mem_pool, cur->value_length + 1);
         if (name_cur && val_cur) {
@@ -132,7 +108,50 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
         }
     } nxt_list_loop;
 
-    nxt_log(t, NXT_LOG_DEBUG, "headers added, state transition to body");
+    traceval = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
+    if (!traceval) {
+        /* let it go blank here.
+         * span still gets populated and sent
+         * but data is not propagated to peer or app.
+         */
+        nxt_log(t, NXT_LOG_ERR,
+                "couldnt allocate traceparent header. span will not propagate");
+        return;
+    }
+
+    // if we didnt inherit a trace id then we need to add the
+    // traceparent header to the request
+    if (!r->otel->trace_id) {
+        nxt_otel_copy_traceparent(traceval, r->otel->trace);
+        f = nxt_list_add(r->fields);
+        if (f) {
+            nxt_http_field_name_set(f, "traceparent");
+            f->value = traceval;
+            f->value_length = nxt_strlen(traceval);
+            nxt_otel_add_event_to_trace(r->otel->trace, f->name, traceval);
+        } else {
+            nxt_log(t, NXT_LOG_ERR,
+                    "couldnt allocate traceparent header in request");
+        }
+    } else {
+        // copy in the pre-existing traceparent for the response
+        snprintf((char *) traceval, NXT_OTEL_TRACEPARENT_LEN + 1, "%s-%s-%s-%s",
+                 (char *) r->otel->version,
+                 (char *) r->otel->trace_id,
+                 (char *) r->otel->parent_id,
+                 (char *) r->otel->trace_flags);
+    }
+
+    f = NULL;
+    f = nxt_list_add(r->resp.fields);
+    if (f) {
+        nxt_http_field_name_set(f, "traceparent");
+        f->value = traceval;
+        f->value_length = nxt_strlen(traceval);
+    } else {
+        nxt_log(t, NXT_LOG_ERR,
+                "couldnt allocate traceparent header in response");
+    }
 
     nxt_otel_state_transition(r->otel, NXT_OTEL_BODY_STATE);
 }

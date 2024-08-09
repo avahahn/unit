@@ -12,12 +12,12 @@
 // forward declared
 struct nxt_http_field_t;
 
-extern void   nxt_otel_send_trace(void *trace);
-extern void * nxt_otel_get_or_create_trace(u_char *trace_id);
+extern void   nxt_otel_send_trace(void *);
+extern void * nxt_otel_get_or_create_trace(u_char *);
 extern void   nxt_otel_init(void (*)(u_char*));
-extern void   nxt_otel_copy_traceparent(u_char *buf, void *trace);
-extern void   nxt_otel_add_event_to_trace(void *trace, u_char *key, u_char *val);
-extern void   nxt_otel_end_span(void *trace);
+extern void   nxt_otel_copy_traceparent(u_char *, void *);
+extern void   nxt_otel_add_event_to_trace(void *, u_char *, u_char *);
+extern void   nxt_otel_end_span(void *);
 
 /* nxt_otel_status_t
  * more efficient than a single handler state struct

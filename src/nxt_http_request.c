@@ -259,6 +259,7 @@ nxt_http_request_create(nxt_task_t *task)
         goto fail;
     }
 
+
     r->resp.fields = nxt_list_create(mp, 8, sizeof(nxt_http_field_t));
     if (nxt_slow_path(r->resp.fields == NULL)) {
         goto fail;
@@ -292,7 +293,6 @@ nxt_http_request_create(nxt_task_t *task)
     }
     // TODO: detect and only set if otel is configured
     r->otel->status = NXT_OTEL_INIT_STATE;
-    nxt_otel_test_and_call_state(task, r);
 #endif
     return r;
 
