@@ -28,4 +28,5 @@ if [ $nxt_found = no ]; then
     exit 1;
 fi
 
+
 NXT_LIB_AUX_LIBS="$NXT_LIB_AUX_LIBS -lssl -lcrypto src/otel/target/debug/libotel.a"
