@@ -1837,10 +1837,9 @@ nxt_h1p_conn_sent(nxt_task_t *task, void *obj, void *data)
 {
     nxt_conn_t          *c;
     nxt_event_engine_t  *engine;
+#if (NXT_HAVE_OTEL)
     nxt_http_request_t  *r;
     r = ((nxt_h1proto_t *) data)->request;
-
-#if (NXT_HAVE_OTEL)
     nxt_otel_test_and_call_state(task, r);
 #endif
 

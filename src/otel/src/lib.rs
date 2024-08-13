@@ -38,18 +38,14 @@ unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
 
     // unwrap
     match res {
-        Err(e) => log_callback(
-            CString::from_vec_unchecked(e.to_string().as_bytes().to_vec())
-                .into_raw() as _,
-        ),
+        Err(e) => {
+            let msg =CString::from_vec_unchecked(e.to_string().as_bytes().to_vec());
+            log_callback(msg.into_raw() as _)
+        },
         Ok(t) => {
             GLOBAL_TRACER_PROVIDER.get_or_init(move || t);
-            log_callback(
-                CString::from_vec_unchecked(
-                    "otel exporter has been initialised".as_bytes().to_vec(),
-                )
-                .into_raw() as _,
-            );
+            let msg = CString::from_vec_unchecked("otel exporter has been initialised".as_bytes().to_vec());
+            log_callback(msg.into_raw() as _);
         }
     }
 }

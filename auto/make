@@ -362,7 +362,7 @@ $NXT_BUILD_DIR/sbin/$NXT_DAEMON:	$NXT_BUILD_DIR/lib/$NXT_LIB_STATIC \\
 				\$(NXT_OBJS)
 	\$(PP_LD) \$@
 	\$(v)\$(NXT_EXEC_LINK) -o \$@ \$(CFLAGS) \\
-		\$(NXT_OBJS) $NXT_BUILD_DIR/lib/$NXT_LIB_STATIC src/otel/target/debug/libotel.a \\
+		\$(NXT_OBJS) $NXT_BUILD_DIR/lib/$NXT_LIB_STATIC \\
 		$NXT_LIBM $NXT_LIBS $NXT_LIB_AUX_LIBS
 
 END

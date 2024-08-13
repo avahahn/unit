@@ -29,7 +29,9 @@ main(int argc, char **argv)
 
     nxt_main_log.handler = nxt_log_time_handler;
 
-    nxt_otel_init(otel_phase1_log_callback);
+#if (NXT_HAVE_OTEL)
+    nxt_otel_init(&otel_phase1_log_callback);
+#endif
     ret = nxt_runtime_create(&nxt_main_task);
 
     if (ret != NXT_OK) {
