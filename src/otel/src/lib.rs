@@ -6,7 +6,7 @@ use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::Protocol::Grpc;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::Config;
-use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::{runtime, Resource};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::{Arc, OnceLock};
@@ -37,7 +37,7 @@ enum SpanMessage {
 unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
     // Create a new mpsc channel. Tokio runtime gets receiver, the send
     // trace function gets sender.
-    let (tx, rx): (Sender<SpanMessage>, Receiver<SpanMessage>) = mpsc::channel(32);
+    let (tx, rx): (Sender<SpanMessage>, Receiver<SpanMessage>) = mpsc::channel(256);
 
     // Store the sender so the other function can also reach it.
     SPAN_TX.get_or_init(|| tx);
@@ -56,7 +56,7 @@ unsafe fn nxt_otel_init(log_callback: unsafe extern "C" fn(*mut i8)) {
 #[tokio::main]
 async unsafe fn runtime(log_callback: unsafe extern "C" fn(*mut i8), mut rx: Receiver<SpanMessage>) {
     let otlp_exporter = opentelemetry_otlp::new_exporter()
-        .http()
+        .tonic()
         .with_endpoint(OTEL_GRPC_TRACES_ENDPOINT)
         .with_protocol(Grpc)
         .with_timeout(Duration::new(10, 0));
@@ -71,7 +71,7 @@ async unsafe fn runtime(log_callback: unsafe extern "C" fn(*mut i8), mut rx: Rec
             )]),
         ))
         .with_exporter(otlp_exporter)
-        .install_simple();
+        .install_batch(runtime::Tokio);
 
 
     match res {
@@ -136,8 +136,11 @@ pub unsafe fn nxt_otel_add_event_to_trace(
     val: *mut i8,
 ) {
     if !key.is_null() && !val.is_null() && !trace.is_null() {
-        let key = CStr::from_ptr(key as _).to_string_lossy();
-        let val = CStr::from_ptr(val as _).to_string_lossy();
+        // We need .into_owned() here because when using the batch exporter, when the
+        // trace gets exported, the request object that these pointers pointed to
+        // no longer exists.
+        let key = CStr::from_ptr(key as _).to_string_lossy().into_owned();
+        let val = CStr::from_ptr(val as _).to_string_lossy().into_owned();
 
         (*trace)
             .add_event(String::from("Unit Attribute"), vec![KeyValue::new(key, val)]);
@@ -150,7 +153,8 @@ pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSpan 
     let trace_cstr: &CStr;
     if !trace_id.is_null() {
         trace_cstr = CStr::from_ptr(trace_id as _);
-        if let Ok(id) = TraceId::from_hex(&trace_cstr.to_string_lossy()) {
+        // We need .into_owned() here as well to avoid referencing a deallocated piece of memory.
+        if let Ok(id) = TraceId::from_hex(&trace_cstr.to_string_lossy().into_owned()) {
             trace_key = Some(id);
         }
     }
@@ -165,8 +169,7 @@ pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSpan 
 }
 
 #[no_mangle]
-#[tokio::main]
-pub async unsafe fn nxt_otel_send_trace(trace: *mut BoxedSpan) {
+pub unsafe fn nxt_otel_send_trace(trace: *mut BoxedSpan) {
     // damage nothing on an improper call
     if trace.is_null() {
         eprintln!("trace was null, returning");
