@@ -322,6 +322,10 @@ nxt_queue_t  updating_sockets;
 nxt_queue_t  keeping_sockets;
 nxt_queue_t  deleting_sockets;
 
+void otel_phase1_log_callback(u_char *arg)
+{
+    printf("otel: %s", (char *)arg);
+}
 
 static nxt_int_t
 nxt_router_prefork(nxt_task_t *task, nxt_process_t *process, nxt_mp_t *mp)
@@ -376,6 +380,10 @@ nxt_router_start(nxt_task_t *task, nxt_process_data_t *data)
     if (controller_port != NULL) {
         nxt_router_greet_controller(task, controller_port);
     }
+
+#if (NXT_HAVE_OTEL)
+    nxt_otel_init(&otel_phase1_log_callback);
+#endif
 
     return NXT_OK;
 }
