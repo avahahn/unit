@@ -82,6 +82,12 @@ under systemd unit runs in forking mode (once again).
 </para>
 </change>
 
+<change type="feature">
+<para>
+Unit now ships with a CLI application "unitctl".
+</para>
+</change>
+
 <change type="change">
 <para>
 if building with njs, version 0.8.3 or later is now required.
