@@ -14,6 +14,8 @@
 
 #define NXT_OTEL_TRACEPARENT_LEN 55
 #define NXT_OTEL_BODY_SIZE_TAG "body size"
+#define NXT_OTEL_METHOD_TAG "method"
+#define NXT_OTEL_PATH_TAG "path"
 
 static inline void nxt_otel_trace_and_span_init(nxt_task_t *, nxt_http_request_t *);
 static inline void nxt_otel_span_collect(nxt_task_t *, nxt_http_request_t *);
@@ -96,6 +98,29 @@ nxt_otel_span_add_headers(nxt_task_t *t, nxt_http_request_t *r)
             nxt_otel_add_event_to_trace(r->otel->trace, name_cur, val_cur);
         }
     } nxt_list_loop;
+
+    // Add method and path to the trace as well
+    // 1. method first
+    name_cur = val_cur = NULL;
+    name_cur = nxt_mp_zalloc(r->mem_pool, sizeof(NXT_OTEL_METHOD_TAG) + 1);
+    val_cur = nxt_mp_zalloc(r->mem_pool, r->method->length + 1);
+    if (name_cur && val_cur) {
+        sprintf((char *) name_cur, NXT_OTEL_METHOD_TAG);
+        strncpy((char *) val_cur, (char *) r->method->start, r->method->length);
+
+        nxt_otel_add_event_to_trace(r->otel->trace, name_cur, val_cur);
+    }
+
+    // 2. path second
+    name_cur = val_cur = NULL;
+    name_cur = nxt_mp_zalloc(r->mem_pool, sizeof(NXT_OTEL_PATH_TAG) + 1);
+    val_cur = nxt_mp_zalloc(r->mem_pool, r->path->length + 1);
+    if (name_cur && val_cur) {
+        sprintf((char *) name_cur, NXT_OTEL_PATH_TAG);
+        strncpy((char *) val_cur, (char *) r->path->start, r->path->length);
+
+        nxt_otel_add_event_to_trace(r->otel->trace, name_cur, val_cur);
+    }
 
     traceval = nxt_mp_zalloc(r->mem_pool, NXT_OTEL_TRACEPARENT_LEN + 1);
     if (!traceval) {
