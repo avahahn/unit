@@ -2202,12 +2202,12 @@ nxt_router_conf_create(nxt_task_t *task, nxt_router_temp_conf_t *tmcf,
         nxt_conf_get_string(otel_proto, &telemetry_proto);
         telemetry_batching = otel_batching ? nxt_conf_get_number(otel_batching) : NXT_OTEL_BATCH_DEFAULT;
 
-        nxt_otel_init(&nxt_otel_log_callback,
+        nxt_otel_rs_init(&nxt_otel_log_callback,
                       nxt_str_cstrz(mp, &telemetry_endpoint),
                       nxt_str_cstrz(mp, &telemetry_proto),
                       telemetry_batching);
     } else {
-      nxt_otel_uninit();
+      nxt_otel_rs_uninit();
     }
 #endif
 

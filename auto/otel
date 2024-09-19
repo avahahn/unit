@@ -1,25 +1,13 @@
 
 # Copyright (C) NGINX, Inc.
 
+NXT_OTEL_LIB_LOC=src/otel/target/release/libotel.a
 
-nxt_found=no
-NXT_HAVE_OTEL=NO
+if [ $NXT_OTEL ]; then
 
-NXT_OTEL_LIB_LOC=src/otel/target/debug/libotel.a
-
-cat << END >> $NXT_AUTO_CONFIG_H
+   cat << END >> $NXT_AUTO_CONFIG_H
 #ifndef NXT_HAVE_OTEL
 #define NXT_HAVE_OTEL 1
 #endif
 END
-
-NXT_LIB_AUX_LIBS="$NXT_LIB_AUX_LIBS $(pkgconf openssl --cflags --libs || "-lssl -lcrypto") $NXT_OTEL_LIB_LOC"
-
-cat << END >> $NXT_MAKEFILE
-
-$NXT_OTEL_LIB_LOC:
-    pushd $NXT_BUILD_DIR/src/otel/
-    cargo build
-    cd ../../
-
-END
+fi

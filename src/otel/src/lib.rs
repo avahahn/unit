@@ -16,9 +16,12 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 
+const TRACEPARENT_HEADER_LEN: u8 = 55;
+
+
 // Stored sender channel to send spans or a shutdown message to within the
 // Tokio runtime.
-unsafe fn span_tx(destruct: bool) -> *const OnceLock<Sender<SpanMessage>> {
+unsafe fn nxt_otel_rs_span_tx(destruct: bool) -> *const OnceLock<Sender<SpanMessage>> {
     static mut SPAN_TX: OnceLock<Sender<SpanMessage>> = OnceLock::new();
     if destruct {
         SPAN_TX.take();
@@ -37,21 +40,21 @@ enum SpanMessage {
 }
 
 #[no_mangle]
-unsafe fn nxt_otel_is_init() -> u8 {
-    (*span_tx(false)).get().map_or(0, |_| 1)
+unsafe fn nxt_otel_rs_is_init() -> u8 {
+    (*nxt_otel_rs_span_tx(false)).get().map_or(0, |_| 1)
 }
 
 #[no_mangle]
-unsafe fn nxt_otel_uninit() {
-    if nxt_otel_is_init() == 1 {
-        nxt_otel_shutdown_tracer();
-        span_tx(true);
+unsafe fn nxt_otel_rs_uninit() {
+    if nxt_otel_rs_is_init() == 1 {
+        nxt_otel_rs_shutdown_tracer();
+        nxt_otel_rs_span_tx(true);
     }
 }
 
 // potentially returns an error message
 #[no_mangle]
-unsafe fn nxt_otel_init(
+unsafe fn nxt_otel_rs_init(
     log_callback: unsafe extern "C" fn(*mut i8),
     endpoint: *const i8,
     protocol: *const i8,
@@ -84,21 +87,21 @@ unsafe fn nxt_otel_init(
         }
 
     // make sure we are starting with a clean state
-    nxt_otel_uninit();
+    nxt_otel_rs_uninit();
 
     // Create a new mpsc channel. Tokio runtime gets receiver, the send
     // trace function gets sender.
     let (tx, rx): (Sender<SpanMessage>, Receiver<SpanMessage>) = mpsc::channel(32);
 
     // Store the sender so the other function can also reach it.
-    match (*span_tx(false)).set(tx) {
+    match (*nxt_otel_rs_span_tx(false)).set(tx) {
         /* spawn a new thread with the tokio runtime and forget about it.
          * This function will return that allows the C code to carry on
          * doing its thing, whereas the runtime function is a long lived
          * process that only exits when a shutdown message is sent.
          */
         Ok(_) => {
-            std::thread::spawn(move || runtime(
+            std::thread::spawn(move || nxt_otel_rs_runtime(
                 log_callback,
                 ep,
                 proto,
@@ -120,7 +123,7 @@ unsafe fn nxt_otel_init(
  * channel, or we terminate the process and leave memory all over.
  */
 #[tokio::main]
-async unsafe fn runtime(
+async unsafe fn nxt_otel_rs_runtime(
     log_callback: unsafe extern "C" fn(*mut i8),
     endpoint: String,
     proto: Protocol,
@@ -181,7 +184,7 @@ async unsafe fn runtime(
 
 // it's on the caller to pass in a buf of proper length
 #[no_mangle]
-pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const BoxedSpan) {
+pub unsafe fn nxt_otel_rs_copy_traceparent(buf: *mut i8, span: *const BoxedSpan) {
     if buf.is_null() || span.is_null() {
         return;
     }
@@ -193,19 +196,19 @@ pub unsafe fn nxt_otel_copy_traceparent(buf: *mut i8, span: *const BoxedSpan) {
         (*span).span_context().trace_flags()  // 1 char, 2 hex
     );
 
-    assert_eq!(traceparent.len(), 55);
+    assert_eq!(traceparent.len(), TRACEPARENT_HEADER_LEN as _);
 
     ptr::copy_nonoverlapping(
         traceparent.as_bytes().as_ptr(),
         buf as _,
-        55,
+        TRACEPARENT_HEADER_LEN as _,
     );
     // set null terminator
-    *buf.add(55) = b'\0' as _;
+    *buf.add(TRACEPARENT_HEADER_LEN as _) = b'\0' as _;
 }
 
 #[no_mangle]
-pub unsafe fn nxt_otel_add_event_to_trace(
+pub unsafe fn nxt_otel_rs_add_event_to_trace(
     trace: *mut BoxedSpan,
     key: *mut i8,
     val: *mut i8,
@@ -224,7 +227,7 @@ pub unsafe fn nxt_otel_add_event_to_trace(
 }
 
 #[no_mangle]
-pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSpan {
+pub unsafe fn nxt_otel_rs_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSpan {
     let mut trace_key = None;
     let trace_cstr: &CStr;
     if !trace_id.is_null() {
@@ -246,7 +249,7 @@ pub unsafe fn nxt_otel_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSpan 
 
 #[no_mangle]
 #[tokio::main]
-pub async unsafe fn nxt_otel_send_trace(trace: *mut BoxedSpan) {
+pub async unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
     // damage nothing on an improper call
     if trace.is_null() {
         eprintln!("trace was null, returning");
@@ -270,7 +273,7 @@ pub async unsafe fn nxt_otel_send_trace(trace: *mut BoxedSpan) {
      * - not a tokio runtime
      * - different tokio runtime
      */
-    (*span_tx(false))
+    (*nxt_otel_rs_span_tx(false))
         .get()
         .unwrap()
         .try_send(SpanMessage::Span { s: arc_span })
@@ -282,8 +285,8 @@ pub async unsafe fn nxt_otel_send_trace(trace: *mut BoxedSpan) {
  * It might be better to close the channels here instead.
  */
 #[no_mangle]
-pub unsafe fn nxt_otel_shutdown_tracer() {
-    (*span_tx(false))
+pub unsafe fn nxt_otel_rs_shutdown_tracer() {
+    (*nxt_otel_rs_span_tx(false))
         .get()
         .unwrap()
         .try_send(SpanMessage::Shutdown)
