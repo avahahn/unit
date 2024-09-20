@@ -32,6 +32,9 @@ jobs:
       CARGO: cargo
       VERSION:
       SHORT_VERSION:
+      OPENSSL_STATIC: YES
+      OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
+      OPENSSL_INCLUDE_DIR: /usr/include/openssl
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +56,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cross
+
+      - name: Install Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt update -y && sudo apt install libssl-dev -y
 
       - name: Install macOS depedencies
         if: startsWith(matrix.os, 'macos')
