@@ -10,14 +10,20 @@ use opentelemetry_sdk::{runtime, Resource};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::ptr::addr_of;
+use std::slice;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 
 const TRACEPARENT_HEADER_LEN: u8 = 55;
 
+
+#[repr(C)]
+pub struct nxt_str_t {
+    pub len: usize,
+    pub start: *const u8,
+}
 
 // Stored sender channel to send spans or a shutdown message to within the
 // Tokio runtime.
@@ -56,8 +62,8 @@ unsafe fn nxt_otel_rs_uninit() {
 #[no_mangle]
 unsafe fn nxt_otel_rs_init(
     log_callback: unsafe extern "C" fn(*mut i8),
-    endpoint: *const i8,
-    protocol: *const i8,
+    endpoint: *const nxt_str_t,
+    protocol: *const nxt_str_t,
     batch_size: f64
 ) {
     if endpoint.is_null() ||
@@ -65,16 +71,14 @@ unsafe fn nxt_otel_rs_init(
         return
     }
 
-    let ep = CStr::from_ptr(endpoint as _)
-        .to_string_lossy()
-        .into_owned();
+    let ep = String::from_utf8_unchecked(
+        slice::from_raw_parts((*endpoint).start, (*endpoint).len).to_vec()
+    ).clone(); // we want our own memory
 
     let proto: Protocol;
-    match CStr::from_ptr(protocol as _)
-        .to_str()
-        .or::<Result<String, ()>>(Ok("<invalid unicode>"))
-        .unwrap()
-        .to_lowercase()
+    match String::from_utf8_unchecked(
+        slice::from_raw_parts((*protocol).start, (*protocol).len).to_vec()
+    ).to_lowercase()
         .as_str() {
             "http" => proto = Protocol::HttpBinary,
             "grpc" => proto = Protocol::Grpc,
@@ -130,14 +134,7 @@ async unsafe fn nxt_otel_rs_runtime(
     batch_size: f64,
     mut rx: Receiver<SpanMessage>
 ) {
-    let otlp_exporter = opentelemetry_otlp::new_exporter()
-        .http()
-        .with_endpoint(endpoint)
-        .with_protocol(proto)
-        .with_timeout(Duration::new(10, 0));
-
-    // Then pass it into pipeline builder
-    let res = opentelemetry_otlp::new_pipeline()
+    let pipeline = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(Config::default().with_resource(
             Resource::new(vec![KeyValue::new(
@@ -149,15 +146,33 @@ async unsafe fn nxt_otel_rs_runtime(
             BatchConfigBuilder::default()
                 .with_max_export_batch_size(batch_size as _)
                 .build()
-        )
-        .with_exporter(otlp_exporter)
-        .install_batch(runtime::Tokio);
+        );
 
+    let res = match proto {
+        Protocol::HttpBinary | Protocol::HttpJson => pipeline
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .http()
+                    .with_http_client(reqwest::Client::new()) // needed because rustls feature
+                    .with_endpoint(endpoint)
+                    .with_protocol(proto)
+                    .with_timeout(std::time::Duration::new(10, 0))
+            ).install_batch(runtime::Tokio),
+        Protocol::Grpc => pipeline
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(endpoint)
+                    .with_protocol(proto)
+                    .with_timeout(std::time::Duration::new(10, 0))
+            ).install_batch(runtime::Tokio),
+    };
 
     match res {
         Err(e) => {
             let msg = CString::from_vec_unchecked(e.to_string().as_bytes().to_vec());
-            log_callback(msg.into_raw() as _)
+            log_callback(msg.into_raw() as _);
+            return;
         }
         Ok(t) => {
             global::set_tracer_provider(t);
@@ -175,8 +190,8 @@ async unsafe fn nxt_otel_rs_runtime(
                 break;
             }
             SpanMessage::Span { s: _s } => {
-                // do nothing, because the point is for this _s var to be dropped here
-                // rather than where it was sent from.
+                // do nothing, because the point is for this _s var to be dropped
+                // here rather than where it was sent from.
             }
         }
     }
@@ -210,19 +225,25 @@ pub unsafe fn nxt_otel_rs_copy_traceparent(buf: *mut i8, span: *const BoxedSpan)
 #[no_mangle]
 pub unsafe fn nxt_otel_rs_add_event_to_trace(
     trace: *mut BoxedSpan,
-    key: *mut i8,
-    val: *mut i8,
+    key: *const nxt_str_t,
+    val: *const nxt_str_t,
 ) {
     if !key.is_null() && !val.is_null() && !trace.is_null() {
-        /* We need .into_owned() here because when using the batch exporter, when the
+        /* We need .clone() here because when using the batch exporter, when the
          * trace gets exported, the request object that these pointers pointed to
          * no longer exists.
          */
-        let key = CStr::from_ptr(key as _).to_string_lossy().into_owned();
-        let val = CStr::from_ptr(val as _).to_string_lossy().into_owned();
+        let key = String::from_utf8_unchecked(
+            slice::from_raw_parts((*key).start, (*key).len).to_vec()
+        ).clone();
+        let val = String::from_utf8_unchecked(
+            slice::from_raw_parts((*val).start, (*val).len).to_vec()
+        ).clone();
 
-        (*trace)
-            .add_event(String::from("Unit Attribute"), vec![KeyValue::new(key, val)]);
+        (*trace).add_event(
+            String::from("Unit Attribute"),
+            vec![KeyValue::new(key, val)]
+        );
     }
 }
 
@@ -238,7 +259,8 @@ pub unsafe fn nxt_otel_rs_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSp
         }
     }
 
-    let span = global::tracer_provider().tracer("NGINX Unit").build(SpanBuilder {
+    let tracer = global::tracer_provider().tracer("NGINX Unit");
+    let span = tracer.build(SpanBuilder {
             trace_id: trace_key,
             span_kind: Some(SpanKind::Server),
             ..Default::default()

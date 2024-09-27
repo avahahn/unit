@@ -1340,6 +1340,10 @@ nxt_h1p_request_header_send(nxt_task_t *task, nxt_http_request_t *r,
 
     nxt_debug(task, "h1p request header send");
 
+#if (NXT_HAVE_OTEL)
+    nxt_otel_test_and_call_state(task, r);
+#endif
+
     r->header_sent = 1;
     h1p = r->proto.h1;
     n = r->status;
@@ -1693,10 +1697,6 @@ nxt_h1p_request_discard(nxt_task_t *task, nxt_http_request_t *r,
 
     nxt_sendbuf_drain(task, wq, b);
     nxt_sendbuf_drain(task, wq, last);
-
-#if (NXT_HAVE_OTEL)
-    nxt_otel_test_and_call_state(task, r);
-#endif
 }
 
 
@@ -1836,12 +1836,6 @@ nxt_h1p_conn_sent(nxt_task_t *task, void *obj, void *data)
 {
     nxt_conn_t          *c;
     nxt_event_engine_t  *engine;
-#if (NXT_HAVE_OTEL)
-    nxt_http_request_t  *r;
-
-    r = ((nxt_h1proto_t *) data)->request;
-    nxt_otel_test_and_call_state(task, r);
-#endif
 
     c = obj;
 

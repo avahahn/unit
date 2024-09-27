@@ -7,6 +7,10 @@
 #include <nxt_router.h>
 #include <nxt_http.h>
 
+#if(NXT_HAVE_OTEL)
+#include <nxt_otel.h>
+#endif
+
 
 static nxt_int_t nxt_http_validate_host(nxt_str_t *host, nxt_mp_t *mp);
 static void nxt_http_request_start(nxt_task_t *task, void *obj, void *data);
@@ -865,11 +869,6 @@ nxt_http_request_error_handler(nxt_task_t *task, void *obj, void *data)
     nxt_debug(task, "http request error handler");
 
     r->error = 1;
-
-#if (NXT_HAVE_OTEL)
-    // TODO
-    // PHASE 2: add error event to span
-#endif
 
     if (nxt_fast_path(proto.any != NULL)) {
         nxt_http_proto[r->protocol].discard(task, r, nxt_http_buf_last(r));
