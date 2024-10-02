@@ -17,7 +17,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 
 const TRACEPARENT_HEADER_LEN: u8 = 55;
-
+const TIMEOUT = std::time::Duration::from_secs(10);
 
 #[repr(C)]
 pub struct nxt_str_t {
@@ -156,7 +156,7 @@ async unsafe fn nxt_otel_rs_runtime(
                     .with_http_client(reqwest::Client::new()) // needed because rustls feature
                     .with_endpoint(endpoint)
                     .with_protocol(proto)
-                    .with_timeout(std::time::Duration::new(10, 0))
+                    .with_timeout(TIMEOUT)
             ).install_batch(runtime::Tokio),
         Protocol::Grpc => pipeline
             .with_exporter(
@@ -164,7 +164,7 @@ async unsafe fn nxt_otel_rs_runtime(
                     .tonic()
                     .with_endpoint(endpoint)
                     .with_protocol(proto)
-                    .with_timeout(std::time::Duration::new(10, 0))
+                    .with_timeout(TIMEOUT)
             ).install_batch(runtime::Tokio),
     };
 
