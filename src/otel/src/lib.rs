@@ -270,8 +270,7 @@ pub unsafe fn nxt_otel_rs_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSp
 }
 
 #[no_mangle]
-#[tokio::main]
-pub async unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
+pub unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
     // damage nothing on an improper call
     if trace.is_null() {
         eprintln!("trace was null, returning");
