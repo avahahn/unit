@@ -211,7 +211,7 @@ pub unsafe fn nxt_otel_rs_copy_traceparent(buf: *mut i8, span: *const BoxedSpan)
         (*span).span_context().trace_flags()  // 1 char, 2 hex
     );
 
-    assert_eq!(traceparent.len(), TRACEPARENT_HEADER_LEN as _);
+    assert_eq!(traceparent.len(), TRACEPARENT_HEADER_LEN as usize);
 
     ptr::copy_nonoverlapping(
         traceparent.as_bytes().as_ptr(),
