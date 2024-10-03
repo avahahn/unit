@@ -248,6 +248,9 @@ nxt_inline nxt_int_t nxt_otel_validate_endpoint(nxt_conf_validation_t *vldt,
 nxt_int_t nxt_otel_validate_batch_size(nxt_conf_validation_t *vldt,
                                        nxt_conf_value_t *value,
                                        void *data);
+nxt_int_t nxt_otel_validate_sample_ratio(nxt_conf_validation_t *vldt,
+                                         nxt_conf_value_t *value,
+                                         void *data);
 nxt_int_t nxt_otel_validate_protocol(nxt_conf_validation_t *vldt,
                                      nxt_conf_value_t *value,
                                      void *data);
@@ -336,6 +339,10 @@ static nxt_conf_vldt_object_t nxt_conf_vldt_otel_members[] = {
         .type      = NXT_CONF_VLDT_STRING,
         .validator = nxt_otel_validate_protocol,
         .flags     = NXT_CONF_VLDT_REQUIRED
+    }, {
+        .name      = nxt_string("sampling_ratio"),
+        .type      = NXT_CONF_VLDT_NUMBER,
+        .validator = nxt_otel_validate_sample_ratio,
     },
 
     NXT_CONF_VLDT_END
@@ -1534,6 +1541,20 @@ nxt_otel_validate_batch_size(nxt_conf_validation_t *vldt,
     return NXT_OK;
 }
 
+nxt_int_t
+nxt_otel_validate_sample_ratio(nxt_conf_validation_t *vldt,
+                               nxt_conf_value_t *value,
+                               void *data)
+{
+    double sample_ratio;
+
+    sample_ratio = nxt_conf_get_number(value);
+    if (sample_ratio < 0 || sample_ratio > 1) {
+        return NXT_ERROR;
+    }
+
+    return NXT_OK;
+}
 
 nxt_int_t
 nxt_otel_validate_protocol(nxt_conf_validation_t *vldt,

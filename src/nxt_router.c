@@ -25,6 +25,7 @@
 #define NXT_SHARED_PORT_ID  0xFFFFu
 #if (NXT_HAVE_OTEL)
 #define NXT_OTEL_BATCH_DEFAULT 128
+#define NXT_OTEL_SAMPLING_DEFAULT 1
 #endif
 
 typedef struct {
@@ -1645,9 +1646,9 @@ nxt_router_conf_create(nxt_task_t *task, nxt_router_temp_conf_t *tmcf,
     nxt_conf_value_t            *js_module;
 #endif
 #if (NXT_HAVE_OTEL)
-    nxt_conf_value_t            *otel, *otel_endpoint, *otel_batching, *otel_proto;
+    nxt_conf_value_t            *otel, *otel_endpoint, *otel_sampling, *otel_batching, *otel_proto;
     nxt_str_t                   telemetry_endpoint, telemetry_proto;
-    double                      telemetry_batching;
+    double                      telemetry_sample_fraction, telemetry_batching;
 #endif
     nxt_conf_value_t            *root, *conf, *http, *value, *websocket;
     nxt_conf_value_t            *applications, *application, *settings;
@@ -1688,6 +1689,7 @@ nxt_router_conf_create(nxt_task_t *task, nxt_router_temp_conf_t *tmcf,
     static const nxt_str_t  telemetry_path = nxt_string("/settings/telemetry");
     static const nxt_str_t  telemetry_endpoint_path = nxt_string("/settings/telemetry/endpoint");
     static const nxt_str_t  telemetry_batch_path = nxt_string("/settings/telemetry/batch_size");
+    static const nxt_str_t  telemetry_sample_path = nxt_string("/settings/telemetry/sampling_ratio");
     static const nxt_str_t  telemetry_proto_path = nxt_string("/settings/telemetry/protocol");
 #endif
 
@@ -2195,16 +2197,19 @@ nxt_router_conf_create(nxt_task_t *task, nxt_router_temp_conf_t *tmcf,
     otel          = nxt_conf_get_path(root, &telemetry_path);
     otel_endpoint = nxt_conf_get_path(root, &telemetry_endpoint_path);
     otel_batching = nxt_conf_get_path(root, &telemetry_batch_path);
+    otel_sampling = nxt_conf_get_path(root, &telemetry_sample_path);
     otel_proto    = nxt_conf_get_path(root, &telemetry_proto_path);
 
     if (otel) {
         nxt_conf_get_string(otel_endpoint, &telemetry_endpoint);
         nxt_conf_get_string(otel_proto, &telemetry_proto);
         telemetry_batching = otel_batching ? nxt_conf_get_number(otel_batching) : NXT_OTEL_BATCH_DEFAULT;
+        telemetry_sample_fraction = otel_sampling ? nxt_conf_get_number(otel_sampling) : NXT_OTEL_SAMPLING_DEFAULT;
 
         nxt_otel_rs_init(&nxt_otel_log_callback,
                       &telemetry_endpoint,
                       &telemetry_proto,
+                      telemetry_sample_fraction,
                       telemetry_batching);
     } else {
       nxt_otel_rs_uninit();
