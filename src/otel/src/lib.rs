@@ -5,10 +5,10 @@ use opentelemetry::trace::{
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::Protocol;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::trace::{Config, BatchConfigBuilder};
+use opentelemetry_sdk::trace::{Config, BatchConfigBuilder, Sampler};
 use opentelemetry_sdk::{runtime, Resource};
 use std::ffi::{CStr, CString};
-use std::ptr;
+use std::{ptr, time};
 use std::ptr::addr_of;
 use std::slice;
 use std::sync::{Arc, OnceLock};
@@ -17,7 +17,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 
 const TRACEPARENT_HEADER_LEN: u8 = 55;
-
+const TIMEOUT: time::Duration = std::time::Duration::from_secs(10);
 
 #[repr(C)]
 pub struct nxt_str_t {
@@ -64,6 +64,7 @@ unsafe fn nxt_otel_rs_init(
     log_callback: unsafe extern "C" fn(*mut i8),
     endpoint: *const nxt_str_t,
     protocol: *const nxt_str_t,
+    sample_fraction: f64,
     batch_size: f64
 ) {
     if endpoint.is_null() ||
@@ -110,6 +111,7 @@ unsafe fn nxt_otel_rs_init(
                 ep,
                 proto,
                 batch_size,
+                sample_fraction,
                 rx
             ));
         },
@@ -132,16 +134,21 @@ async unsafe fn nxt_otel_rs_runtime(
     endpoint: String,
     proto: Protocol,
     batch_size: f64,
+    sample_fraction: f64,
     mut rx: Receiver<SpanMessage>
 ) {
     let pipeline = opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_trace_config(Config::default().with_resource(
-            Resource::new(vec![KeyValue::new(
-                opentelemetry_semantic_conventions::resource::SERVICE_NAME,
-                "NGINX Unit",
-            )]),
-        ))
+        .with_trace_config(
+            Config::default()
+                .with_resource(
+                    Resource::new(vec![KeyValue::new(
+                        opentelemetry_semantic_conventions::resource::SERVICE_NAME,
+                        "NGINX Unit",
+                    )])
+                )
+                .with_sampler(Sampler::TraceIdRatioBased(sample_fraction))
+        )
         .with_batch_config(
             BatchConfigBuilder::default()
                 .with_max_export_batch_size(batch_size as _)
@@ -156,7 +163,7 @@ async unsafe fn nxt_otel_rs_runtime(
                     .with_http_client(reqwest::Client::new()) // needed because rustls feature
                     .with_endpoint(endpoint)
                     .with_protocol(proto)
-                    .with_timeout(std::time::Duration::new(10, 0))
+                    .with_timeout(TIMEOUT)
             ).install_batch(runtime::Tokio),
         Protocol::Grpc => pipeline
             .with_exporter(
@@ -164,7 +171,7 @@ async unsafe fn nxt_otel_rs_runtime(
                     .tonic()
                     .with_endpoint(endpoint)
                     .with_protocol(proto)
-                    .with_timeout(std::time::Duration::new(10, 0))
+                    .with_timeout(TIMEOUT)
             ).install_batch(runtime::Tokio),
     };
 
@@ -211,7 +218,7 @@ pub unsafe fn nxt_otel_rs_copy_traceparent(buf: *mut i8, span: *const BoxedSpan)
         (*span).span_context().trace_flags()  // 1 char, 2 hex
     );
 
-    assert_eq!(traceparent.len(), TRACEPARENT_HEADER_LEN as _);
+    assert_eq!(traceparent.len(), TRACEPARENT_HEADER_LEN as usize);
 
     ptr::copy_nonoverlapping(
         traceparent.as_bytes().as_ptr(),
@@ -270,8 +277,7 @@ pub unsafe fn nxt_otel_rs_get_or_create_trace(trace_id: *mut i8) -> *mut BoxedSp
 }
 
 #[no_mangle]
-#[tokio::main]
-pub async unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
+pub unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
     // damage nothing on an improper call
     if trace.is_null() {
         eprintln!("trace was null, returning");

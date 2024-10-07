@@ -19,6 +19,7 @@ extern void   * nxt_otel_rs_get_or_create_trace(u_char *trace_id);
 extern void     nxt_otel_rs_init(void (*log_callback)(u_char *log_string),
                                  const nxt_str_t *endpoint,
                                  const nxt_str_t *protocol,
+                                 double sample_fraction,
                                  double batch_size);
 extern void     nxt_otel_rs_copy_traceparent(u_char *buffer, void *span);
 extern void     nxt_otel_rs_add_event_to_trace(void *trace,
