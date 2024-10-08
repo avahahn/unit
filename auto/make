@@ -7,10 +7,10 @@
 
 $echo "creating $NXT_MAKEFILE"
 
-if [ ! -v NXT_OTEL_LIB_LOC ];  then
-   NXT_OTEL_LIB_LOC=
-   NXT_OTEL_BUILD_FLAG=
-   NXT_OTEL_LIB_DIR=
+if [ $NXT_OTEL = "NO" ];  then
+    NXT_OTEL_LIB_LOC=
+    NXT_OTEL_BUILD_FLAG=
+    NXT_OTEL_LIB_DIR=
 fi
 
 cat << END > $NXT_MAKEFILE
@@ -315,7 +315,7 @@ END
 
 else
 
-    cat << END >> $NXT_MAKEFILE 
+    cat << END >> $NXT_MAKEFILE
 
 .PHONY: tests
 tests:
@@ -561,7 +561,7 @@ if [ $NXT_OTEL = YES ]; then
     cat << END >> Makefile
 		cd "$NXT_OTEL_LIB_DIR" && cargo clean
 END
-        
+
     cat << END >> $NXT_MAKEFILE
 
 $NXT_OTEL_LIB_LOC:

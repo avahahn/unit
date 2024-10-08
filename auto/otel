@@ -16,7 +16,7 @@ if [ $NXT_OTEL ]; then
     if [ $(which pkgconf) ]; then
         NXT_OTEL_LIBS="$(pkgconf openssl --cflags --libs)"
     elif [ $(which pkg-config) ]; then
-        NXT_OTEL_LIBS="$(pkgconf openssl --cflags --libs)"
+        NXT_OTEL_LIBS="$(pkg-config openssl --cflags --libs)"
     fi
     NXT_LIB_AUX_LIBS="$NXT_LIB_AUX_LIBS $NXT_OTEL_LIBS"
     cat << END >> $NXT_AUTO_CONFIG_H

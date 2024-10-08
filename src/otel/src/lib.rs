@@ -152,6 +152,7 @@ async unsafe fn nxt_otel_rs_runtime(
         .with_batch_config(
             BatchConfigBuilder::default()
                 .with_max_export_batch_size(batch_size as _)
+                .with_max_queue_size(4098)
                 .build()
         );
 
@@ -303,9 +304,7 @@ pub unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
      */
     (*nxt_otel_rs_span_tx(false))
         .get()
-        .unwrap()
-        .try_send(SpanMessage::Span { s: arc_span })
-        .unwrap();
+        .and_then(|x| Some(x.try_send(SpanMessage::Span{ s: arc_span })));
 }
 
 /* Function to send a shutdown signal to the tokio runtime.
@@ -316,7 +315,5 @@ pub unsafe fn nxt_otel_rs_send_trace(trace: *mut BoxedSpan) {
 pub unsafe fn nxt_otel_rs_shutdown_tracer() {
     (*nxt_otel_rs_span_tx(false))
         .get()
-        .unwrap()
-        .try_send(SpanMessage::Shutdown)
-        .unwrap();
+        .and_then(|x| Some(x.try_send(SpanMessage::Shutdown)));
 }
